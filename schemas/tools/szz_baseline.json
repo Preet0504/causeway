@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/szz_baseline.json",
+  "name": "szz_baseline",
+  "title": "szz.baseline",
+  "description": "Deterministic fault-inducing commit identification via PySZZ. R-SZZ is the default variant: it performed best against the developer-informed oracle of Rosa et al. (ICSE 2021). Results are CANDIDATES, never asserted facts — blame-based SZZ provably misses commits requiring history traversal beyond blame, and cannot see blameless fixes at all.",
+  "x-causeway": {
+    "class": "P",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NotApplicable",
+      "Timeout",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "fixSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "variant": {
+        "enum": [
+          "B-SZZ",
+          "AG-SZZ",
+          "L-SZZ",
+          "R-SZZ",
+          "MA-SZZ",
+          "RA-SZZ"
+        ]
+      }
+    },
+    "required": [
+      "repoHandle",
+      "fixSha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "variant": {
+        "type": "string"
+      },
+      "inducing": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "sha": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "confidence": {
+              "$ref": "causeway://schemas/_common.json#/$defs/confidence"
+            },
+            "viaLines": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "filtersApplied": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "sha",
+            "confidence"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "variant",
+      "inducing"
+    ],
+    "additionalProperties": false
+  }
+}

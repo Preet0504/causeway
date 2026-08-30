@@ -1,0 +1,396 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Causeway-Flow">
+    <mxGraphModel dx="2600" dy="5200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2600" pageHeight="5240" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="TT" value="CAUSEWAY &#8212; control and data flow" style="text;html=1;fontSize=26;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="24" width="1200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="TS" value="Left column: what executes.   Centre: the flow.   Right: what is recorded, including every rejection.   Far right: the evidence rail that every single call passes through." style="text;html=1;fontSize=13;fontStyle=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="60" width="1600" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="LG" value="LEGEND&#10;&#10;rectangle    deterministic operation&#10;shaded box   reasoning agent&#10;diamond      decision&#10;heavy border hard gate&#10;dashed box   recorded, run continues&#10;edge label   the value that flows" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8" vertex="1" parent="1">
+          <mxGeometry x="2160" y="24" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="RAIL" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F0F0F0;strokeColor=#000000;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="2160" y="200" width="380" height="4700" as="geometry" />
+        </mxCell>
+        <mxCell id="RAILT" value="THE EVIDENCE RAIL&#10;&#10;EVERY arrow in this chart that calls a tool passes through here first.&#10;&#10;1  tool exists in the catalog&#10;2  the caller is permitted&#10;3  input validates&#10;4  handler runs&#10;5  output validates&#10;6  evidence id minted, recorded&#10;&#10;Response is always&#10;{ ok, evidenceId, data | unknown }&#10;&#10;An `unknown` is a SUCCESS with a&#10;stated reason, and is citable." style="text;html=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=12;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="2172" y="212" width="356" height="300" as="geometry" />
+        </mxCell>
+
+        <mxCell id="FR1" value="findings_record&#10;an agent tries to assert a claim" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2200" y="560" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="FR2" value="every cited id&#10;issued by this&#10;run's ledger?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2210" y="660" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="FR3" value="REFUSED&#10;&#8220;Retrieve the fact rather than&#10;rephrasing the claim.&#8221;&#10;The agent must call a tool." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2200" y="810" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="FR4" value="Finding persisted&#10;with SUPPORTED_BY edges" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2200" y="930" width="300" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="FRe1" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="FR1" target="FR2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="FRe2" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="FR2" target="FR3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="FRe3" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="FR2" target="FR4"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2530" y="715" /><mxPoint x="2530" y="958" /></Array></mxGeometry></mxCell>
+        <mxCell id="FRe4" value="retrieve, then retry" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;dashed=1;fontSize=10;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="FR3" target="FR1"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2170" y="850" /><mxPoint x="2170" y="590" /></Array></mxGeometry></mxCell>
+        <mxCell id="FRN" value="This is the founding rule as a&#10;mechanism. Finding's constructor&#10;is private; the write path is the&#10;only way in, and it validates." style="text;html=1;fontSize=10;fontStyle=2;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="2172" y="1000" width="356" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="N1" value="Signal[A] = Known | Unknown(reason)&#10;&#10;There is no getOrElse anywhere.&#10;A failed build cannot become a&#10;coverage of 0.0. Reasons are a&#10;closed enum and are aggregated&#10;into the run's honesty report." style="text;html=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=12" vertex="1" parent="1">
+          <mxGeometry x="2172" y="1100" width="356" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="N2" value="NOTES are not evidence.&#10;&#10;Agents write notes across runs&#10;(ENVIRONMENT, CONVENTION,&#10;DEAD_END, FIXTURE). They carry&#10;note_ ids; findings_record&#10;requires ^ev_, so a note is&#10;structurally uncitable.&#10;&#10;Notes influence what an agent&#10;DOES. Evidence determines what&#10;an agent may SAY." style="text;html=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=12" vertex="1" parent="1">
+          <mxGeometry x="2172" y="1250" width="356" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="N3" value="CHECKPOINTS&#10;&#10;Every stage writes (runId, stage,&#10;key) with an idempotent MERGE.&#10;An interrupted run resumes at the&#10;first stage with pending work.&#10;&#10;A retry MUST reuse its key, or&#10;name what it supersedes. A retry&#10;under a new key strands the old&#10;row and the stage can never read&#10;as complete." style="text;html=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=12" vertex="1" parent="1">
+          <mxGeometry x="2172" y="1480" width="356" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="N4" value="CONTAINERS&#10;&#10;Everything past the build gate&#10;runs isolated: memory and CPU&#10;caps, wall-clock timeout,&#10;workspace bind-mount only.&#10;&#10;Builds and test runs GET network,&#10;because dependency resolution&#10;needs it.&#10;Agent-authored harnesses DO NOT." style="text;html=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=12" vertex="1" parent="1">
+          <mxGeometry x="2172" y="1710" width="356" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="N5" value="HANDLES, not payloads&#10;&#10;Clones, build trees and call&#10;graphs never enter an agent's&#10;context. Tools return an opaque,&#10;content-derived handle and the&#10;agent queries through it.&#10;&#10;repoHandle  buildHandle&#10;callGraphId reportId  traceId&#10;&#10;Content-derived means the same&#10;input yields the same handle&#10;after a restart." style="text;html=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=12" vertex="1" parent="1">
+          <mxGeometry x="2172" y="1930" width="356" height="230" as="geometry" />
+        </mxCell>
+
+        <mxCell id="START" value="repository URL&#10;--window  --cap  --deep" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=13;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="760" y="200" width="400" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C1" value="repo_clone&#10;full clone, never shallow" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="310" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C1L" value="S0  INGEST&#10;blame and SZZ need complete history;&#10;a shallow clone truncates lineage&#10;silently rather than failing." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="310" width="580" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C2" value="repo_detect_ecosystem" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="410" width="400" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D1" value="ecosystem&#10;supported?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="500" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="X1" value="STOP&#10;report the detection evidence.&#10;JVM and LLVM only." style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="520" width="360" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D2" value="incomplete run&#10;for this repo?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="650" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="R1" value="graph_resume_state&#10;jump to the first stage with&#10;pending work" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="670" width="360" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="A1" value="AGENT  build-doctor&#10;read CI workflow, build file, declared level&#10;choose a container image" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="800" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="A1L" value="S1  ENVIRONMENT&#10;history_file_at  E&#10;forge_ci_status  E&#10;jvm_build_toolchain  E&#10;jvm_build_probe  P     &#8592; the feedback loop&#10;&#10;This agent is one of only two that may call a&#10;class P tool, because it must PROVE a recipe&#10;rather than propose one." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="790" width="580" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C3" value="jvm_build_probe&#10;compile in a container" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="910" width="400" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="D3" value="does it&#10;compile?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="1000" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="X2" value="STOP&#10;no recipe works, so every&#10;downstream number would be&#10;Unknown. Better to stop than&#10;to produce a row of gaps." style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="1010" width="360" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="A2" value="AGENT  mining-strategist&#10;choose the window, decide which nets to run" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1160" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="A2L" value="S2  CANDIDATES&#10;history_list_commits  E&#10;history_candidates    E" style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="1160" width="580" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="NET1" value="LEXICAL&#10;message patterns" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1280" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="NET2" value="STRUCTURAL&#10;source AND test touched" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="860" y="1280" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="NET3" value="RANDOM_CONTROL&#10;MANDATORY" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="1280" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="NETN" value="drawn from the commits that&#10;matched NO net. It is the only&#10;unbiased estimator of what the&#10;prefilter MISSED. Precision can&#10;be computed without it; recall&#10;cannot." style="text;html=1;fontSize=10;fontStyle=2;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="1270" width="330" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C4" value="union, tag each candidate with the nets that matched,&#10;apply the cap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1390" width="400" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C5" value="forge_bundle_candidates&#10;batched GraphQL, aliased" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1500" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C5L" value="S3  BUNDLING&#10;deterministic, no agent.&#10;Rate limiting maps to&#10;Unknown(RateLimited), never an&#10;exception, so a throttled run&#10;degrades into recorded gaps." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="1490" width="580" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="FAN1" value="partition into batches of ~15, dispatch in waves of at most 5" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1610" width="400" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="A3a" value="AGENT&#10;adjudicator" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="620" y="1690" width="150" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="A3b" value="AGENT&#10;adjudicator" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="785" y="1690" width="150" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="A3c" value="AGENT&#10;adjudicator" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="950" y="1690" width="150" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="A3d" value="&#8230;" style="text;html=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="1700" width="60" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="A3L" value="S4  ADJUDICATION&#10;history_diff  E    history_commit_meta  E&#10;history_file_at  E forge_issue  E&#10;forge_issue_comments  E&#10;forge_pr_for_commit   E&#10;forge_ci_status  E jvm_tests_for_change  E&#10;&#10;Control candidates are INTERLEAVED into the&#10;same batches, so the adjudicator cannot treat&#10;them differently.&#10;&#10;Read the diff before the message." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="1660" width="470" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D4" value="verdict?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="1790" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="R2" value="NOT_BUG_FIX  or  UNDECIDED&#10;&#10;Recorded as a Finding with its rationale and&#10;evidence, and kept. UNDECIDED is a real answer:&#10;forcing a binary decision on an ambiguous commit&#10;pollutes the dataset invisibly." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6" vertex="1" parent="1">
+          <mxGeometry x="1400" y="1790" width="420" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C6" value="history_diff  &#8594;  jvm_method_at_line  &#8594;  szz_baseline&#10;deterministic, for every confirmed fix" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1950" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C6L" value="S5  STRUCTURE&#10;Rename detection ON. Without it a renamed file&#10;reads as delete-all plus add-all and every line&#10;looks like a fault.&#10;&#10;SZZ runs for EVERY fix, before any expensive&#10;gate: blame needs no build, so a bug that later&#10;fails a gate still carries real lineage." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="1930" width="580" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C7" value="check out parent(f) and f&#10;one worktree each" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="2070" width="400" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="C8" value="jvm_build_probe  &#215;2&#10;compile only, never tests" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="2160" width="400" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="D5" value="do BOTH&#10;revisions&#10;compile?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=4;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="810" y="2250" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="C8L" value="S6  BUILD GATE   HARD&#10;Each revision gets its own worktree, so two&#10;probes never contend and the clone stays on its&#10;default branch for history queries.&#10;&#10;Compile surfaces a failure in seconds where a&#10;test run takes minutes, and this gate runs&#10;twice per bug." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="2150" width="580" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="R3" value="admitted = false,  with a classification&#10;&#10;DependencyResolution &#183; JdkMismatch&#10;MissingToolchain &#183; CompileError &#183; Timeout&#10;&#10;NEVER deleted. Keeping rejected bugs is what&#10;makes the dataset's selection bias measurable&#10;instead of invisible. They still carry their&#10;git-level data." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6" vertex="1" parent="1">
+          <mxGeometry x="1400" y="2240" width="420" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C9" value="jvm_coverage_run  at parent(f)&#10;the project's OWN suite, instrumented" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="2430" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C10" value="jvm_callgraph_build  at parent(f)&#10;SootUp, entry points from the recipe" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="2530" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C9L" value="S7  COVERAGE AND CALL GRAPH&#10;Coverage of the changed lines is queried at the&#10;PARENT using OLD-side ranges. This is the single&#10;most important coordinate discipline here, and&#10;the reason OldLines and NewLines are different&#10;types: ask the parent with fix-side numbers and&#10;you get a different method, plausibly.&#10;&#10;Coverage is AGGREGATE: a covered line was&#10;reached by SOME test, never an identified one." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="2420" width="580" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D6" value="is this&#10;dimension&#10;Known?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="2640" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="R4" value="EXCLUDED from the composite&#10;&#10;not coerced to zero. A bug whose coverage&#10;could not be measured is not thereby&#10;unimportant; it has one fewer dimension of&#10;evidence, and scoredOn records which." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6" vertex="1" parent="1">
+          <mxGeometry x="1400" y="2640" width="420" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="C11" value="rank_importance&#10;composite over the Known dimensions only&#10;take the top --deep" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="2800" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="C11L" value="S8  RANKING&#10;dimensions: faultLineCoverage, blastRadius,&#10;symptomDistance, churn&#10;&#10;scoredOn travels with the score forever. A&#10;composite over three dimensions and one over&#10;seven are not comparable, and without scoredOn&#10;the number looks as though they are." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="2790" width="580" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="A4" value="AGENT  symptom-characterizer&#10;waves of at most 5" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="2920" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A4L" value="S9  SYMPTOM&#10;forge_issue  E   forge_issue_comments  E&#10;forge_pr_for_commit  E&#10;history_file_at  E   jvm_tests_for_change  E&#10;&#10;Answers only WHAT was seen and WHERE.&#10;It does not explain the cause; the path-tracer&#10;owns that. Without the boundary the two agents&#10;drift and produce inconsistent findings.&#10;&#10;Where no issue exists, the symptom is rebuilt&#10;from source at lower confidence, with&#10;NoLinkedIssue recorded as an explicit gap." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="2910" width="580" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="LADT" value="S10   THE REPRODUCER LADDER   cheapest rung first, and the rung reached decides whether a path can be OBSERVED at all" style="text;html=1;fontSize=14;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="140" y="3070" width="1400" height="22" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D7" value="did the fix&#10;ship a&#10;regression test?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="3110" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="C12" value="jvm_native_test_run&#10;port the fix's test onto the parent,&#10;run it at BOTH revisions" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="3260" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="C12L" value="RUNG 1&#10;The test does not exist at the parent when the&#10;fix ADDS it, which is the normal case, so the&#10;fix's test sources are ported over. Production&#10;code at the parent is untouched: the test is&#10;new, the code under test is not.&#10;&#10;Porting is scoped to the selector's own classes,&#10;because one uncompilable sibling would fail the&#10;whole module's test compile." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="3250" width="580" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D8" value="fails at parent&#10;AND&#10;passes at fix?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="3370" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="T1" value="T1  NATIVE&#10;the highest fidelity reproducer there is:&#10;the one the person who fixed the bug wrote.&#10;Parent run is instrumented  &#8594;  traceId" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1400" y="3380" width="420" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D9" value="does the symptom&#10;carry a verbatim&#10;stack trace?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="3540" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="C13" value="repro_botsing" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="3565" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="T2a" value="T2" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1650" y="3565" width="90" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="C13L" value="RUNG 2 is INAPPLICABLE, not merely&#10;unsuccessful, on a repository whose&#10;users report prose and reproduction&#10;code rather than stack traces." style="text;html=1;fontSize=10;fontStyle=2;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="3625" width="420" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="A5" value="AGENT  reproducer-synthesist&#10;write a harness, budget of 3 iterations" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="3720" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C14" value="jvm_harness_run&#10;compile the harness against BOTH revisions,&#10;run both, compare" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="3810" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="D10" value="differs?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="3910" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="T2b" value="T2 / T3" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1400" y="3940" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="A5L" value="RUNG 3, the only rung that costs an agent&#10;&#10;Its advantage is that it can SEE the fix. It&#10;knows exactly which condition changed, so it&#10;constructs an input that drives execution into&#10;that condition rather than searching blindly.&#10;&#10;differs = false means the input REACHED the&#10;fault but did not infect state. That is the&#10;signal to iterate, not to give up." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="3800" width="580" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C15" value="repro_evosuite_sweep&#10;generate, then filter differentially" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="4070" width="400" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="T4" value="T4  STATIC&#10;nothing reproduces. The path will be&#10;drawn from structure alone and MUST&#10;be tiered as hypothesised." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="4150" width="420" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ORC" value="THE DIFFERENTIAL ORACLE&#10;&#10;run(input, parent)   vs   run(input, fix)&#10;&#10;differ  &#8594; the input triggers the bug, because the fix&#10;          changed what it does. No human needed to state&#10;          what correct behaviour is.&#10;same    &#8594; reached but not infected. Iterate.&#10;&#10;Observable difference is defined narrowly: a thrown&#10;exception (type and site), or a returned value.&#10;File, log and stdout effects are excluded as noisy;&#10;timing and resource use as too flaky to be evidence." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=11;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8" vertex="1" parent="1">
+          <mxGeometry x="1400" y="3720" width="640" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="PT" value="S11   PATH   the deliverable" style="text;html=1;fontSize=14;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="140" y="4270" width="900" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="D11" value="is there a&#10;traceId?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="4310" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="C16" value="G(parent)  INTERSECT  Ex(f)&#10;discard every chain containing a method&#10;that did not execute" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="4470" width="380" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="C17" value="G(parent) alone&#10;structure with nothing to confirm it" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="4470" width="380" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="A6" value="AGENT  path-tracer&#10;one per bug, waves of at most 4" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="4590" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A6L" value="jvm_trace_executed  E    jvm_trace_path_in  E&#10;jvm_callgraph_chains_to  E&#10;jvm_callgraph_paths  E   jvm_callgraph_callers  E&#10;jvm_method_body  E       jvm_coverage_lines  E&#10;jvm_class_hierarchy  E   history_blame  E&#10;&#10;Both endpoints are known by construction, so&#10;this is pathfinding between two fixed points,&#10;never a search for an unknown fault." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="4580" width="580" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="D12" value="a route from&#10;entryPoint to&#10;fault exists?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=3;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="4680" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="R5" value="DISCONNECTED&#10;&#10;and that is a FINDING, not a failure. A defect&#10;that travels through shared object state rather&#10;than through call edges has no route a call&#10;graph can express. Recorded with the reason,&#10;never bridged with a plausible guess." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6" vertex="1" parent="1">
+          <mxGeometry x="1400" y="4680" width="440" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C18" value="tier each hop&#10;OBSERVED only when BOTH endpoints are in Ex(f)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="4860" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="C18L" value="Method-level evidence: coverage records that a&#10;method RAN, not that a particular call edge was&#10;taken. A hop with one endpoint missing is not&#10;observed, and a hop through a method the&#10;instrument cannot report at all is UNMEASURABLE,&#10;which is a third thing and is counted separately." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="4850" width="580" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C19" value="graph_upsert_bug   &#183;   export_run&#10;idempotent MERGE on natural keys" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="4960" width="400" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="C20" value="REPORT&#10;fraction of path steps OBSERVED, and the&#10;Unknown breakdown in full" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="760" y="5060" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="C20L" value="S12, S13&#10;The export includes bugs that FAILED admission,&#10;for the same reason the graph keeps them.&#10;&#10;The Unknown breakdown is the dataset's honesty&#10;report: it tells a consumer what the data can&#10;and cannot support." style="text;html=1;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="140" y="4990" width="580" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="START" target="C1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="repoHandle" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C1" target="C2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C2" target="D1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D1" target="X1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D1" target="D2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D2" target="R1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="no, fresh run" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D2" target="A1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="candidate image" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="A1" target="C3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C3" target="D3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="no, try another image" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;dashed=1;fontSize=10;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="D3" target="A1"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="700" y="1055" /><mxPoint x="700" y="835" /></Array></mxGeometry></mxCell>
+        <mxCell id="e11" value="exhausted" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D3" target="X2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="buildRecipe" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D3" target="A2"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="A2" target="NET1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="A2" target="NET2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="A2" target="NET3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="NET1" target="C4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="NET2" target="C4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="NET3" target="C4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" value="K + control sample" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C4" target="C5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e20" value="bundle" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C5" target="FAN1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="FAN1" target="A3a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="FAN1" target="A3b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e23" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="FAN1" target="A3c"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e24" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="A3a" target="D4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e25" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="A3b" target="D4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e26" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="A3c" target="D4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e27" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;exitX=1;exitY=0.5;" edge="1" parent="1" source="D4" target="R2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e28" value="BUG_FIX      F" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D4" target="C6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e29" value="oldRanges  faultMethods  inducingCommit" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C6" target="C7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e30" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C7" target="C8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e31" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C8" target="D5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e32" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D5" target="R3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e33" value="yes    F_b + buildHandle" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D5" target="C9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e34" value="reportId" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C9" target="C10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e35" value="callGraphId" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C10" target="D6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e36" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D6" target="R4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e37" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D6" target="C11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e38" value="the deep set" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C11" target="A4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e39" value="entryPoint  symptomClass" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="A4" target="D7"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e40" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D7" target="C12"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e41" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C12" target="D8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e42" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=3;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D8" target="T1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e43" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="D8" target="D9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e44" value="no test shipped" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="D7" target="D9"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="740" y="3165" /><mxPoint x="740" y="3600" /></Array></mxGeometry></mxCell>
+        <mxCell id="e45" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D9" target="C13"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e46" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;" edge="1" parent="1" source="C13" target="T2a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e47" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D9" target="A5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e48" value="harnessSource" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="A5" target="C14"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e49" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C14" target="D10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e50" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=3;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D10" target="T2b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e51" value="no, iterate  (budget 3)" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;dashed=1;fontSize=10;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="D10" target="A5"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="740" y="3965" /><mxPoint x="740" y="3750" /></Array></mxGeometry></mxCell>
+        <mxCell id="e52" value="budget spent" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="D10" target="C15"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e53" value="nothing reproduces" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="C15" target="T4"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e54" value="reproducerTier  traceId" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C15" target="D11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e55" value="T1  T2  T3" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=3;fontSize=10;entryX=1;entryY=0.5;" edge="1" parent="1" source="T1" target="D11"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1980" y="3425" /><mxPoint x="1980" y="4365" /></Array></mxGeometry></mxCell>
+        <mxCell id="e56" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=3;fontSize=10;" edge="1" parent="1" source="D11" target="C16"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e57" value="no, T4" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="D11" target="C17"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e58" value="OBSERVED" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=3;fontSize=10;" edge="1" parent="1" source="C16" target="A6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e59" value="HYPOTHESIZED" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="C17" target="A6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e60" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="A6" target="D12"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e61" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;fontSize=10;exitX=1;exitY=0.5;" edge="1" parent="1" source="D12" target="R5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e62" value="yes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="D12" target="C18"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e63" value="path  pathTier  pathFidelity" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="C18" target="C19"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e64" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" edge="1" parent="1" source="C19" target="C20"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e65" value="rejected bugs are persisted too" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;dashed=1;fontSize=10;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="R3" target="C19"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1900" y="2310" /><mxPoint x="1900" y="4988" /></Array></mxGeometry></mxCell>
+        <mxCell id="e66" value="DISCONNECTED is persisted as a tier" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#000000;dashed=1;fontSize=10;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="R5" target="C19"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1620" y="4988" /></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

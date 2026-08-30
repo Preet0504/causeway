@@ -1,0 +1,3 @@
+{"ts":"2026-08-23T05:25:24.759Z","sessionId":"32c220eb-694a-4353-b08c-30a0b4e355f6","agentId":"a86503e217d0917d0","agent":"build-doctor","event":"start","effort":null}
+{"ts":"2026-08-23T05:25:36.631Z","sessionId":"32c220eb-694a-4353-b08c-30a0b4e355f6","agentId":"a65635e85e8b7a330","agent":"mining-strategist","event":"start","effort":null}
+{"ts":"2026-08-23T05:28:35.013Z","sessionId":"32c220eb-694a-4353-b08c-30a0b4e355f6","agentId":"a86503e217d0917d0","agent":"build-doctor","event":"stop","finalMessageChars":4651}

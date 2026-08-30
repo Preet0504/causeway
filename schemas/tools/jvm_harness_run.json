@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_harness_run.json",
+  "name": "jvm_harness_run",
+  "title": "jvm.harness_run",
+  "description": "Compile an agent-authored harness against BOTH the parent and the fix revision, run both in a network-isolated container, and compare. Behavioural difference across the fix boundary IS the oracle: differs=true proves the input triggers the bug, with no human judgment required. Observable difference is thrown exception (type and site) and return value ONLY — bugs manifesting solely through file writes, logs, timing, or leaked resources cannot be confirmed here. Path FIDELITY (FULL/PARTIAL/UNIT) is not an input here: it is a judgement the synthesist makes ABOUT the harness it wrote, and judgements belong on the finding, recorded through findings_record, not on the tool call that would ignore it.",
+  "x-causeway": {
+    "class": "X",
+    "module": "jvm",
+    "permission": "ask",
+    "agents": [
+      "reproducer-synthesist"
+    ],
+    "unknownReasons": [
+      "BuildFailed",
+      "Timeout",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "fixSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "harnessSource": {
+        "type": "string",
+        "description": "Complete compilable Java source for the harness."
+      },
+      "entryPoint": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "timeoutSec": {
+        "type": "integer",
+        "description": "Default 120, capped by server policy."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "fixSha",
+      "harnessSource",
+      "entryPoint"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "compiled": {
+        "type": "boolean"
+      },
+      "compileError": {
+        "type": "string"
+      },
+      "reachedFault": {
+        "type": "boolean"
+      },
+      "differs": {
+        "type": "boolean"
+      },
+      "differsOn": {
+        "type": "array",
+        "items": {
+          "enum": [
+            "EXCEPTION",
+            "RETURN"
+          ]
+        }
+      },
+      "resultAtParent": {
+        "type": "object",
+        "properties": {
+          "exceptionType": {
+            "type": "string"
+          },
+          "exceptionSite": {
+            "type": "string"
+          },
+          "returnValue": {
+            "type": "string"
+          },
+          "timedOut": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "resultAtFix": {
+        "type": "object",
+        "properties": {
+          "exceptionType": {
+            "type": "string"
+          },
+          "exceptionSite": {
+            "type": "string"
+          },
+          "returnValue": {
+            "type": "string"
+          },
+          "timedOut": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId"
+      },
+      "executedMethodCount": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "compiled"
+    ],
+    "additionalProperties": false
+  }
+}

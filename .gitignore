@@ -1,0 +1,25 @@
+# run artifacts — clones, container build trees, coverage reports, harnesses
+workspace/
+
+# scala / sbt
+target/
+project/target/
+project/project/
+.bsp/
+.bloop/
+.metals/
+metals.sbt
+*.class
+
+# secrets — the PAT and Neo4j password live here, never in .mcp.json
+.env
+.env.local
+
+# per-machine Claude Code state: MCP approvals, personal permission overrides
+.claude/settings.local.json
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

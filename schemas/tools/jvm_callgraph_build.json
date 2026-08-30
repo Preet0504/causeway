@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_callgraph_build.json",
+  "name": "jvm_callgraph_build",
+  "title": "jvm.callgraph_build",
+  "description": "Construct a call graph from compiled bytecode via OPAL. Returns a HANDLE — a call graph has millions of edges and must never enter agent context. Entry points come from the BuildRecipe; wrong entry points produce a structurally valid, analytically worthless graph. SootUp IS the engine here — OPAL was dropped because it is built against Scala 3.7 while this project is on the 3.3 LTS and TASTy is not forward compatible — so there is no second implementation to cross-check against.",
+  "x-causeway": {
+    "class": "P",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NoDebugInfo",
+      "Timeout",
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "algorithm": {
+        "enum": [
+          "CHA",
+          "RTA",
+          "PointsTo"
+        ]
+      },
+      "entryPoints": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+        }
+      }
+    },
+    "required": [
+      "buildHandle",
+      "entryPoints"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "callGraphId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/callGraphId"
+      },
+      "algorithm": {
+        "type": "string"
+      },
+      "nodeCount": {
+        "type": "integer"
+      },
+      "edgeCount": {
+        "type": "integer"
+      },
+      "entryPointCount": {
+        "type": "integer"
+      },
+      "hasDebugInfo": {
+        "type": "boolean"
+      },
+      "sootUpDisagreements": {
+        "type": "integer",
+        "description": "Edges present in one backend and absent in the other."
+      }
+    },
+    "required": [
+      "callGraphId",
+      "algorithm",
+      "nodeCount",
+      "edgeCount",
+      "hasDebugInfo"
+    ],
+    "additionalProperties": false
+  }
+}

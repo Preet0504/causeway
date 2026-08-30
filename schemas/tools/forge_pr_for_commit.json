@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/forge_pr_for_commit.json",
+  "name": "forge_pr_for_commit",
+  "title": "forge.pr_for_commit",
+  "description": "Resolve the pull request that introduced a commit, with the issues it closes.",
+  "x-causeway": {
+    "class": "E",
+    "module": "forge",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "symptom-characterizer"
+    ],
+    "unknownReasons": [
+      "RateLimited",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle",
+        "description": "The clone to derive owner/name from. Passed rather than asking for owner/name so an agent cannot query one repository while analysing another."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "sha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "prNumber": {
+        "type": "integer"
+      },
+      "title": {
+        "type": "string"
+      },
+      "body": {
+        "type": "string"
+      },
+      "mergedAt": {
+        "type": "string"
+      },
+      "linkedIssues": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "reviewCount": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "prNumber",
+      "title"
+    ],
+    "additionalProperties": false
+  }
+}

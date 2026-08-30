@@ -1,0 +1,14 @@
+{"ts":"2026-08-23T14:48:51.807Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"acf0cd24dadc295bd","agent":"build-doctor","event":"start","effort":null}
+{"ts":"2026-08-23T14:52:18.598Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"acf0cd24dadc295bd","agent":"build-doctor","event":"stop","finalMessageChars":3321}
+{"ts":"2026-08-23T14:52:45.936Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a696ca87eb66ef98e","agent":"mining-strategist","event":"start","effort":null}
+{"ts":"2026-08-23T14:58:27.368Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a696ca87eb66ef98e","agent":"mining-strategist","event":"stop","finalMessageChars":5860}
+{"ts":"2026-08-23T15:00:54.527Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a165524d015b16959","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T15:01:12.222Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a2067442594376f1a","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T15:01:21.165Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"af353268a1d690864","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T22:18:37.330Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"af81cb3b38c9d65c8","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T22:18:56.181Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a19f548eeae9d2665","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T22:19:15.383Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a6528acf416a4bf95","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T22:20:05.065Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"af81cb3b38c9d65c8","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":3270}
+{"ts":"2026-08-23T22:20:44.340Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a19f548eeae9d2665","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":2752}
+{"ts":"2026-08-23T22:21:33.369Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":"a6528acf416a4bf95","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":3318}
+{"ts":"2026-08-23T23:44:17.261Z","sessionId":"097c2ded-d583-44f6-a3a1-6e946db00da5","agentId":null,"agent":"orchestrator","event":"session-end","transcriptPath":"C:\\Users\\Lenovo\\.claude\\projects\\f--UIC-Agentic-Workflows-repo-bugs-extraction\\097c2ded-d583-44f6-a3a1-6e946db00da5.jsonl"}

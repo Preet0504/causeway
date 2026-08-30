@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/graph_checkpoint.json",
+  "name": "graph_checkpoint",
+  "title": "graph.checkpoint",
+  "description": "Mark one (stage, key) as complete so an interrupted run resumes instead of restarting.",
+  "x-causeway": {
+    "class": "P",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "stage": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "DONE",
+          "FAILED",
+          "SKIPPED"
+        ]
+      },
+      "detail": {
+        "type": "string"
+      },
+      "supersedes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Keys of EARLIER attempts at this same stage that this checkpoint replaces. Checkpoints are keyed by (runId, stage, key), so a retry under a different key strands the old row and resume_state counts it as work still outstanding forever. Superseded rows are marked, never deleted — a failed attempt is a true record of the run. Name only attempts at the same work: a stage with one key per bug legitimately has some DONE and some FAILED, and superseding a failure because a sibling succeeded would hide the outcome."
+      },
+      "repo": {
+        "type": "string",
+        "description": "owner/name. Recorded so a later resume can find this run BY REPOSITORY — an agent starting work does not know a prior runs id."
+      }
+    },
+    "required": [
+      "runId",
+      "stage",
+      "key",
+      "status"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "acknowledged": {
+        "type": "boolean"
+      },
+      "supersededCount": {
+        "type": "integer",
+        "description": "Earlier attempts at this stage marked superseded by this call."
+      }
+    },
+    "required": [
+      "acknowledged"
+    ],
+    "additionalProperties": false
+  }
+}

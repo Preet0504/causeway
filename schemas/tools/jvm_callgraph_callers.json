@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_callgraph_callers.json",
+  "name": "jvm_callgraph_callers",
+  "title": "jvm.callgraph_callers",
+  "description": "Transitive callers of a method, to a bounded depth. Also the blast-radius input for importance ranking.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "callGraphId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/callGraphId"
+      },
+      "method": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "depth": {
+        "type": "integer",
+        "description": "Default 3."
+      }
+    },
+    "required": [
+      "callGraphId",
+      "method"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "callers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+            },
+            "depth": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "method",
+            "depth"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "totalCount": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "callers",
+      "totalCount",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

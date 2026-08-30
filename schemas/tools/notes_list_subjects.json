@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/notes_list_subjects.json",
+  "name": "notes_list_subjects",
+  "title": "notes.list_subjects",
+  "description": "Cheap index of what notes exist for a repository — kinds and subjects only, no bodies. Call this first to see whether anything relevant was recorded before pulling full note text, so a large note store does not flood agent context.",
+  "x-causeway": {
+    "class": "N",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist",
+      "bugfix-adjudicator",
+      "build-doctor",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoSlug": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "repoSlug"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "subjects": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "causeway://schemas/_common.json#/$defs/noteKind"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "lastWrittenAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "subject",
+            "count"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "totalNotes": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "subjects",
+      "totalNotes"
+    ],
+    "additionalProperties": false
+  }
+}

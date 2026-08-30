@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/history_diff.json",
+  "name": "history_diff",
+  "title": "history.diff",
+  "description": "Diff a commit against its parent, with rename detection ON. Without rename detection a rename reads as delete-all plus add-all, which destroys blame lineage and makes SZZ output meaningless. Hunks carry exactly the CHANGED lines and no surrounding context: widening them to include context would corrupt the changed-line ranges this project treats as ground truth. Use history_file_at for the lines around a hunk.",
+  "x-causeway": {
+    "class": "E",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "parentIndex": {
+        "type": "integer",
+        "description": "Which parent to diff against. Default 0."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "sha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/hunk"
+        }
+      },
+      "stats": {
+        "type": "object",
+        "properties": {
+          "linesAdded": {
+            "type": "integer"
+          },
+          "linesDeleted": {
+            "type": "integer"
+          },
+          "filesTouched": {
+            "type": "integer"
+          },
+          "hunkCount": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "linesAdded",
+          "linesDeleted",
+          "filesTouched",
+          "hunkCount"
+        ],
+        "additionalProperties": false
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "files",
+      "stats",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_method_at_line.json",
+  "name": "jvm_method_at_line",
+  "title": "jvm.method_at_line",
+  "description": "Resolve a file and line number to its enclosing method, via the artifact line-number debug table. This is the linchpin joining git coordinates to code coordinates. Stripped debug info returns Unknown(NoDebugInfo) and every downstream path degrades to file granularity.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NoDebugInfo",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "file": {
+        "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+      },
+      "line": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "buildHandle",
+      "file",
+      "line"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "method": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      }
+    },
+    "required": [
+      "method"
+    ],
+    "additionalProperties": false
+  }
+}

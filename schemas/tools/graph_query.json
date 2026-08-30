@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/graph_query.json",
+  "name": "graph_query",
+  "title": "graph.query",
+  "description": "Run a named, parameterised query. Free-form Cypher is not accepted — queries are declared server-side so results stay schema-checked and injection is impossible.",
+  "x-causeway": {
+    "class": "E",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist"
+    ],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "Truncated",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Registered query name."
+      },
+      "params": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "rowCount": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name",
+      "rows",
+      "rowCount",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

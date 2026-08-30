@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/metrics_complexity_delta.json",
+  "name": "metrics_complexity_delta",
+  "title": "metrics.complexity_delta",
+  "description": "Cyclomatic complexity of the changed methods, before and after, computed from bytecode.",
+  "x-causeway": {
+    "class": "P",
+    "module": "metrics",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "BuildFailed",
+      "NoDebugInfo",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "parentBuildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "fixBuildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "methods": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+        }
+      }
+    },
+    "required": [
+      "parentBuildHandle",
+      "fixBuildHandle",
+      "methods"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "perMethod": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+            },
+            "before": {
+              "type": "integer"
+            },
+            "after": {
+              "type": "integer"
+            },
+            "delta": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "method",
+            "before",
+            "after",
+            "delta"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "perMethod"
+    ],
+    "additionalProperties": false
+  }
+}

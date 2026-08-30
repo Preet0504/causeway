@@ -1,0 +1,511 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Causeway-Architecture" id="0">
+    <mxGraphModel dx="683" dy="408" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2240" pageHeight="3720" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="TT" parent="1" style="text;html=1;fontSize=28;fontStyle=1;align=left;" value="CAUSEWAY — system architecture and pipeline data flow" vertex="1">
+          <mxGeometry height="36" width="1400" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="TS" parent="1" style="text;html=1;fontSize=14;fontStyle=2;align=left;" value="Mining symptom-to-fault paths from repository history. Deterministic work is a service; reasoning is an agent; every claim is bound to the tool return that produced it." vertex="1">
+          <mxGeometry height="22" width="1600" x="40" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="LGB" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="96" width="540" x="1660" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="LG0" parent="1" style="text;html=1;fontSize=11;fontStyle=1;align=left;" value="LEGEND" vertex="1">
+          <mxGeometry height="16" width="200" x="1672" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="LG1" parent="1" style="text;html=1;fontSize=10;align=left;verticalAlign=top;" value="P  pipeline service, called by the orchestrator&#xa;E  evidence query, called by agents&#xa;X  experiment, executes agent-authored code&#xa;R  recording   ·   N  notes, non-evidentiary" vertex="1">
+          <mxGeometry height="60" width="270" x="1672" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="LG2" parent="1" style="text;html=1;fontSize=10;align=left;verticalAlign=top;" value="shaded box   dispatches a reasoning agent&#xa;heavy border  hard gate, the run can stop here&#xa;← S#   input produced by that stage&#xa;→ S#   output consumed by that stage" vertex="1">
+          <mxGeometry height="60" width="240" x="1950" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="AB" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#000000;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="360" width="2160" x="40" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ABT" parent="1" style="text;html=1;fontSize=13;fontStyle=1;align=left;" value="LAYERS" vertex="1">
+          <mxGeometry height="18" width="300" x="52" y="148" as="geometry" />
+        </mxCell>
+        <mxCell id="A1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8" value="ORCHESTRATOR&#xa;/mine-repo slash command&#xa;&#xa;Owns the stage order, the hard gates, and the fan-out ceilings.&#xa;Checkpoints after every stage, so an interrupted run resumes&#xa;rather than restarting. Calls class P tools directly." vertex="1">
+          <mxGeometry height="126" width="480" x="60" y="176" as="geometry" />
+        </mxCell>
+        <mxCell id="A2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=2;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8" value="SIX REASONING AGENTS&#xa;one distinct QUESTION each, never a tool category&#xa;&#xa;mining-strategist   where is there minable signal?&#xa;build-doctor        how does this repository build?&#xa;bugfix-adjudicator  is this commit a genuine bug fix?&#xa;symptom-characterizer  what did an observer see, and where?&#xa;reproducer-synthesist  what input makes it manifest?&#xa;path-tracer         what route connects symptom to fault?" vertex="1">
+          <mxGeometry height="126" width="560" x="560" y="176" as="geometry" />
+        </mxCell>
+        <mxCell id="A3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8" value="DETERMINISTIC SERVICES&#xa;&#xa;vcs         JGit: clone, diff, blame, candidate nets, SZZ&#xa;forge       GitHub GraphQL v4, batched&#xa;jvm         build probe, SootUp, JaCoCo, containers, harness&#xa;metrics     pure total functions over Signal&#xa;graphstore  Neo4j, note store" vertex="1">
+          <mxGeometry height="126" width="520" x="1140" y="176" as="geometry" />
+        </mxCell>
+        <mxCell id="A4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8" value="PERSISTENCE&#xa;&#xa;Neo4j    Run, Checkpoint, Evidence, Finding, Bug, Commit&#xa;         every write an idempotent MERGE on a natural key&#xa;notes/   per-repo agent knowledge, filesystem, NOT evidence&#xa;runs/    telemetry, exports, reports&#xa;workspace/  clones, per-commit worktrees, dependency cache" vertex="1">
+          <mxGeometry height="126" width="500" x="1680" y="176" as="geometry" />
+        </mxCell>
+        <mxCell id="MB" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;strokeWidth=3;fontSize=13;fontStyle=1;verticalAlign=top;spacingTop=8" value="MCP BOUNDARY — every call from the orchestrator and every call from an agent crosses this one interface" vertex="1">
+          <mxGeometry height="150" width="2120" x="60" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="M1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" value="1&#xa;tool exists&#xa;in the catalog" vertex="1">
+          <mxGeometry height="58" width="270" x="80" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" value="2&#xa;calling agent&#xa;is permitted" vertex="1">
+          <mxGeometry height="58" width="270" x="370" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" value="3&#xa;input validates&#xa;against the schema" vertex="1">
+          <mxGeometry height="58" width="270" x="660" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" value="4&#xa;handler runs" vertex="1">
+          <mxGeometry height="58" width="270" x="950" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;" value="5&#xa;output validates&#xa;additionalProperties=false" vertex="1">
+          <mxGeometry height="58" width="270" x="1240" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="6&#xa;evidence id minted&#xa;and recorded" vertex="1">
+          <mxGeometry height="58" width="270" x="1530" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;" value="Signal[A]&#xa;Known | Unknown(reason)&#xa;never a default value" vertex="1">
+          <mxGeometry height="58" width="340" x="1820" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="M8" parent="1" style="text;html=1;fontSize=11;align=left;fontStyle=2" value="Every response has one shape:  { ok, evidenceId, data | unknown }.  An `unknown` is a SUCCESS carrying a stated reason and is citable.  Schemas in schemas/tools/ are the source of truth: the server refuses at startup to serve a tool that has none." vertex="1">
+          <mxGeometry height="20" width="2080" x="80" y="434" as="geometry" />
+        </mxCell>
+        <mxCell id="AE1" edge="1" parent="1" source="A1" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" target="MB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="AE2" edge="1" parent="1" source="A2" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;" target="MB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="AE3" edge="1" parent="1" source="MB" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;startArrow=block;" target="A3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="AE4" edge="1" parent="1" source="MB" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;startArrow=block;" target="A4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="CH0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="STAGE" vertex="1">
+          <mxGeometry height="34" width="170" x="40" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="CH1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="INPUTS  (and the stage that produced them)" vertex="1">
+          <mxGeometry height="34" width="420" x="215" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="CH2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="WHAT RUNS  (tools by class, agents in bold)" vertex="1">
+          <mxGeometry height="34" width="600" x="640" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="CH3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="OUTPUTS  (and the stages that consume them)" vertex="1">
+          <mxGeometry height="34" width="470" x="1245" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="CH4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="RULES AND GATES" vertex="1">
+          <mxGeometry height="34" width="480" x="1720" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="S0a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S0&#xa;INGEST" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="584" as="geometry" />
+        </mxCell>
+        <mxCell id="S0b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="repository URL&#xa;--window, --cap, --deep&#xa;--resume runId, optional" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="584" as="geometry" />
+        </mxCell>
+        <mxCell id="S0c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="repo_clone  P&#xa;repo_detect_ecosystem  P&#xa;graph_resume_state  N" vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="584" as="geometry" />
+        </mxCell>
+        <mxCell id="S0d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="repoHandle        → S1 S2 S3 S5 S6&#xa;runId             → all stages&#xa;defaultBranch, headSha&#xa;ecosystem (JVM | LLVM | UNSUPPORTED)" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="584" as="geometry" />
+        </mxCell>
+        <mxCell id="S0e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Clone is FULL, never shallow: blame and SZZ need&#xa;complete history, and a shallow clone truncates&#xa;lineage silently rather than failing.&#xa;&#xa;An incomplete prior run for this repo is RESUMED&#xa;rather than restarted. Unsupported ecosystem&#xa;stops the run and reports the detection evidence." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="584" as="geometry" />
+        </mxCell>
+        <mxCell id="S1a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=12;fontStyle=1" value="S1&#xa;ENVIRONMENT" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="744" as="geometry" />
+        </mxCell>
+        <mxCell id="S1b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="repoHandle   ← S0" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="744" as="geometry" />
+        </mxCell>
+        <mxCell id="S1c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="AGENT  build-doctor&#xa;&#xa;history_file_at  E        read the build file at a revision&#xa;forge_ci_status  E        which JDK the project&#39;s CI uses&#xa;jvm_build_toolchain  E    detect tool + declared level&#xa;jvm_build_probe  P        compile in a container to PROVE it&#xa;notes_read / notes_write  N&#xa;findings_record  R" vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="744" as="geometry" />
+        </mxCell>
+        <mxCell id="S1d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="buildRecipe       → S6 S7 S10&#xa;  baseImage&#xa;  buildTool&#xa;  buildCommand, testCommand&#xa;  callGraphEntryPoints&#xa;Finding(STRATEGY)  → S12" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="744" as="geometry" />
+        </mxCell>
+        <mxCell id="S1e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="The recipe is PROVED by a probe, not proposed.&#xa;This is why build-doctor is one of only two&#xa;consumers of a class P tool: it needs the&#xa;feedback loop.&#xa;&#xa;GATE: if no recipe works the run stops here.&#xa;Every downstream number would be Unknown.&#xa;&#xa;Entry points matter: wrong ones give a valid,&#xa;useless call graph." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="744" as="geometry" />
+        </mxCell>
+        <mxCell id="S2a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=12;fontStyle=1" value="S2&#xa;CANDIDATES" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="904" as="geometry" />
+        </mxCell>
+        <mxCell id="S2b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="repoHandle   ← S0&#xa;window, cap  ← invocation" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="904" as="geometry" />
+        </mxCell>
+        <mxCell id="S2c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="AGENT  mining-strategist&#xa;&#xa;history_list_commits  E   walk the window&#xa;history_candidates    E   run the recall nets&#xa;graph_resume_state    N&#xa;graph_query           N&#xa;findings_record       R&#xa;&#xa;THREE RECALL NETS&#xa;LEXICAL      message patterns&#xa;STRUCTURAL   diff shape: source AND test touched&#xa;RANDOM_CONTROL  unbiased sample, MANDATORY" vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="904" as="geometry" />
+        </mxCell>
+        <mxCell id="S2d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="K  candidate set     → S3 S4&#xa;   with per-net tags per candidate&#xa;control sample       → S4, interleaved&#xa;unmatched stratum size&#xa;Finding(STRATEGY)    → S12" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="904" as="geometry" />
+        </mxCell>
+        <mxCell id="S2e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="The control net is what makes recall measurable.&#xa;Precision can be computed from adjudicated&#xa;results; recall cannot, without a sample that&#xa;NO filter selected.&#xa;&#xa;Per-net tags are kept so per-net precision is&#xa;recoverable later." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="904" as="geometry" />
+        </mxCell>
+        <mxCell id="S3a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S3&#xa;BUNDLING" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="1064" as="geometry" />
+        </mxCell>
+        <mxCell id="S3b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="K            ← S2&#xa;repoHandle   ← S0" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="1064" as="geometry" />
+        </mxCell>
+        <mxCell id="S3c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="forge_bundle_candidates  P&#xa;&#xa;Chunked and aliased into as few GraphQL round&#xa;trips as the complexity limit allows.&#xa;No agent: this is retrieval, not judgement." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="1064" as="geometry" />
+        </mxCell>
+        <mxCell id="S3d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="per-candidate bundle   → S4&#xa;  message, author, dates&#xa;  files touched, lines added/deleted&#xa;  touchesSource, touchesTests&#xa;  linked issue or pull request&#xa;  CI conclusion" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="1064" as="geometry" />
+        </mxCell>
+        <mxCell id="S3e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Rate limiting maps to Unknown(RateLimited),&#xa;never an exception, so a throttled run degrades&#xa;into recorded gaps instead of failing.&#xa;&#xa;A reference such as #1234 may be an ISSUE or a&#xa;PULL REQUEST; both are resolved, because&#xa;squash-merging projects cite PRs." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="1064" as="geometry" />
+        </mxCell>
+        <mxCell id="S4a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=12;fontStyle=1" value="S4&#xa;ADJUDICATION" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="1224" as="geometry" />
+        </mxCell>
+        <mxCell id="S4b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="K            ← S2&#xa;bundle       ← S3" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="1224" as="geometry" />
+        </mxCell>
+        <mxCell id="S4c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="AGENT  bugfix-adjudicator   batches of ~15,&#xa;                            waves of at most 5&#xa;&#xa;history_commit_meta  E     history_diff  E&#xa;history_file_at      E     forge_issue   E&#xa;forge_issue_comments E     forge_pr_for_commit  E&#xa;forge_ci_status      E     jvm_tests_for_change  E&#xa;findings_record      R     notes_*  N" vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="1224" as="geometry" />
+        </mxCell>
+        <mxCell id="S4d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="F  confirmed bug fixes  → S5 S6&#xa;Finding(VERDICT) per candidate  → S12&#xa;  BUG_FIX | NOT_BUG_FIX | UNDECIDED&#xa;  confidence, rationale, cited evidence" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="1224" as="geometry" />
+        </mxCell>
+        <mxCell id="S4e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Control candidates are INTERLEAVED into the same&#xa;batches, so the adjudicator cannot treat them&#xa;differently.&#xa;&#xa;UNDECIDED is a real verdict and is used. Forcing&#xa;a binary decision on genuinely ambiguous commits&#xa;pollutes the dataset invisibly.&#xa;&#xa;Read the diff before the message: a message&#xa;saying “fix” over a dependency bump is a chore." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="1224" as="geometry" />
+        </mxCell>
+        <mxCell id="S5a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S5&#xa;STRUCTURE" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="1384" as="geometry" />
+        </mxCell>
+        <mxCell id="S5b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="F            ← S4&#xa;repoHandle   ← S0" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="1384" as="geometry" />
+        </mxCell>
+        <mxCell id="S5c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="history_diff       E   rename detection ON&#xa;jvm_method_at_line E   line to method, via the&#xa;                       debug table&#xa;szz_baseline       P   B-SZZ or R-SZZ over blame&#xa;&#xa;Deterministic. No agent." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="1384" as="geometry" />
+        </mxCell>
+        <mxCell id="S5d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="oldRanges : OldLines   → S7 S11&#xa;   the faulty lines, in PARENT coordinates&#xa;newRanges : NewLines   → S12&#xa;faultMethods           → S10 S11&#xa;inducingCommit         → S12&#xa;   plus SZZ confidence and filters applied" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="1384" as="geometry" />
+        </mxCell>
+        <mxCell id="S5e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="OldLines and NewLines are DIFFERENT TYPES.&#xa;Querying the parent with fix-side line numbers&#xa;returns a different method and looks plausible.&#xa;Mixing them is a compile error.&#xa;&#xa;SZZ runs for EVERY f, before any expensive gate:&#xa;blame needs no build, so bugs that later fail a&#xa;gate still carry real lineage.&#xa;&#xa;Without rename detection a renamed file reads as&#xa;delete-all plus add-all, and every line is a fault." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="1384" as="geometry" />
+        </mxCell>
+        <mxCell id="S6a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=4;fontSize=12;fontStyle=1" value="S6&#xa;BUILD GATE&#xa;HARD" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="1544" as="geometry" />
+        </mxCell>
+        <mxCell id="S6b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="F            ← S4&#xa;buildRecipe  ← S1&#xa;repoHandle   ← S0" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="1544" as="geometry" />
+        </mxCell>
+        <mxCell id="S6c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="repo_checkout    P   one worktree per revision&#xa;jvm_build_probe  P   TWICE per bug:&#xa;                     parent(f) and f&#xa;&#xa;Runs in a container. Network ALLOWED here,&#xa;because Maven and Gradle cannot resolve&#xa;dependencies without it.&#xa;Compile only, never tests." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="1544" as="geometry" />
+        </mxCell>
+        <mxCell id="S6d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="F_b  build-admitted set   → S7 S8&#xa;buildHandle per revision  → S7 S10&#xa;   content-derived from worktree + image,&#xa;   so it reproduces across a restart&#xa;classpath (compiled class dirs)&#xa;failureClass for each rejection  → S12" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="1544" as="geometry" />
+        </mxCell>
+        <mxCell id="S6e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=4;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="HARD GATE. Both revisions must compile, because&#xa;everything downstream requires execution.&#xa;&#xa;Failures are RECORDED, never deleted:&#xa;admitted=false plus a classification&#xa;  DependencyResolution | JdkMismatch&#xa;  MissingToolchain | CompileError | Timeout&#xa;Keeping them is what makes the dataset&#39;s&#xa;selection bias measurable.&#xa;&#xa;Each revision gets its OWN worktree, so probes&#xa;do not contend and the clone stays on its branch." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="1544" as="geometry" />
+        </mxCell>
+        <mxCell id="S7a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S7&#xa;COVERAGE +&#xa;CALL GRAPH" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="1704" as="geometry" />
+        </mxCell>
+        <mxCell id="S7b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="F_b          ← S6&#xa;buildHandle  ← S6&#xa;oldRanges    ← S5&#xa;buildRecipe  ← S1" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="1704" as="geometry" />
+        </mxCell>
+        <mxCell id="S7c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="jvm_coverage_run    P   the project&#39;s OWN suite,&#xa;                        instrumented, at parent(f)&#xa;jvm_coverage_lines  E   per-line status for a range&#xa;jvm_callgraph_build P   SootUp, CHA or RTA,&#xa;                        over parent(f)&#xa;&#xa;Agent instrumentation is attached through&#xa;JAVA_TOOL_OPTIONS, which the JVM honours&#xa;unconditionally and additively." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="1704" as="geometry" />
+        </mxCell>
+        <mxCell id="S7d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="reportId       → S8 S11&#xa;   per-line coverage, content-hashed&#xa;callGraphId    → S10 S11&#xa;   nodes, edges, entry points, hasDebugInfo&#xa;coverage of the changed lines  → S8" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="1704" as="geometry" />
+        </mxCell>
+        <mxCell id="S7e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Coverage is queried at the PARENT with OLD-side&#xa;ranges. This is the single most important&#xa;coordinate discipline in the system.&#xa;&#xa;Coverage is AGGREGATE over the run: a covered&#xa;line was reached by SOME test, never an&#xa;identified one.&#xa;&#xa;A call graph handle retains a whole JDK view, so&#xa;handles are held in a bounded LRU. An evicted&#xa;handle returns a citable Unknown naming its own&#xa;remedy, not a failure." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="1704" as="geometry" />
+        </mxCell>
+        <mxCell id="S8a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S8&#xa;RANKING" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="1864" as="geometry" />
+        </mxCell>
+        <mxCell id="S8b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="F_b         ← S6&#xa;reportId    ← S7&#xa;callGraphId ← S7&#xa;oldRanges   ← S5" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="1864" as="geometry" />
+        </mxCell>
+        <mxCell id="S8c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="metrics_coverage_impact  P&#xa;metrics_churn            P&#xa;metrics_complexity_delta P&#xa;metrics_bug_lifetime     P&#xa;rank_importance          P&#xa;&#xa;Pure total functions over Signal." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="1864" as="geometry" />
+        </mxCell>
+        <mxCell id="S8d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="importance  composite in [0,1]   → S12&#xa;scoredOn    which dimensions were Known&#xa;deep set    the top --deep bugs   → S9 S10 S11&#xa;&#xa;dimensions: faultLineCoverage, blastRadius,&#xa;            symptomDistance, churn" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="1864" as="geometry" />
+        </mxCell>
+        <mxCell id="S8e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="The composite is taken ONLY over dimensions that&#xa;are Known. An Unknown dimension is excluded, not&#xa;coerced to zero: a bug whose coverage could not&#xa;be measured is not thereby unimportant.&#xa;&#xa;scoredOn travels with the score forever. A&#xa;composite over three dimensions and one over&#xa;seven are not comparable, and without scoredOn&#xa;the number looks as though they are." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="1864" as="geometry" />
+        </mxCell>
+        <mxCell id="S9a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=12;fontStyle=1" value="S9&#xa;SYMPTOM" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="2024" as="geometry" />
+        </mxCell>
+        <mxCell id="S9b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="deep set     ← S8&#xa;bundle       ← S3&#xa;repoHandle   ← S0" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="2024" as="geometry" />
+        </mxCell>
+        <mxCell id="S9c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="AGENT  symptom-characterizer   waves of at most 5&#xa;&#xa;forge_issue           E&#xa;forge_issue_comments  E&#xa;forge_pr_for_commit   E&#xa;history_commit_meta   E&#xa;history_file_at       E   read the parent&#39;s source&#xa;jvm_tests_for_change  E   what the fix&#39;s tests assert&#xa;findings_record       R" vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="2024" as="geometry" />
+        </mxCell>
+        <mxCell id="S9d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="symptomClass             → S10 S12&#xa;   CRASH | DATA_CORRUPTION_OR_LOSS&#xa;   INCORRECT_OUTPUT | HANG | ...&#xa;entryPoint : MethodRef   → S10 S11&#xa;   where the symptom SURFACED&#xa;Finding(SYMPTOM) with explicit gaps  → S12" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="2024" as="geometry" />
+        </mxCell>
+        <mxCell id="S9e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Answers only WHAT was seen and WHERE. It does&#xa;not explain the cause; the path-tracer owns that.&#xa;Without that boundary the two agents drift into&#xa;each other and produce inconsistent findings.&#xa;&#xa;entryPoint is the public method through which&#xa;the symptom became visible, NOT the method that&#xa;was wrong. Path length is measured from it.&#xa;&#xa;Where no issue exists the symptom is&#xa;reconstructed from source, at lower confidence,&#xa;with NoLinkedIssue recorded as a gap." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="2024" as="geometry" />
+        </mxCell>
+        <mxCell id="S10a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=12;fontStyle=1" value="S10&#xa;REPRODUCER&#xa;the ladder" vertex="1">
+          <mxGeometry height="190" width="170" x="40" y="2184" as="geometry" />
+        </mxCell>
+        <mxCell id="S10b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="entryPoint    ← S9&#xa;symptomClass  ← S9&#xa;faultMethods  ← S5&#xa;buildHandle   ← S6&#xa;buildRecipe   ← S1&#xa;callGraphId   ← S7&#xa;the fix diff  ← S5" vertex="1">
+          <mxGeometry height="190" width="420" x="215" y="2184" as="geometry" />
+        </mxCell>
+        <mxCell id="S10c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="RUNG 1  jvm_native_test_run  P&#xa;  the project&#39;s own regression test, ported onto&#xa;  the parent and run there.  → T1_NATIVE&#xa;RUNG 2  repro_botsing  P&#xa;  needs a verbatim stack trace.  → T2&#xa;RUNG 3  AGENT reproducer-synthesist, budget 3&#xa;  writes a harness; jvm_harness_run  X&#xa;  compiles it against BOTH revisions.  → T2 / T3&#xa;RUNG 4  repro_evosuite_sweep  P&#xa;  generate, then filter differentially.  → T3&#xa;RUNG 5  nothing reproduces.  → T4_STATIC" vertex="1">
+          <mxGeometry height="190" width="600" x="640" y="2184" as="geometry" />
+        </mxCell>
+        <mxCell id="S10d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="reproducerTier  T1 | T2 | T3 | T4   → S11 S12&#xa;traceId                             → S11&#xa;   the executed method set of the FAILING run&#xa;   at the parent&#xa;differs, differsOn  EXCEPTION | RETURN&#xa;                    | ASSERTION&#xa;resultAtParent, resultAtFix&#xa;Finding(REPRODUCER)                 → S12" vertex="1">
+          <mxGeometry height="190" width="470" x="1245" y="2184" as="geometry" />
+        </mxCell>
+        <mxCell id="S10e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="THE DIFFERENTIAL ORACLE. Both revisions exist, so&#xa;no human is needed to state correct behaviour:&#xa;   run(input, parent) vs run(input, fix)&#xa;   differ   → the input triggers the bug&#xa;   same     → reached but not infected, iterate&#xa;&#xa;Cheapest rung first. Only rung 3 costs an agent.&#xa;&#xa;Executed set = coverage probes UNION the throw&#39;s&#xa;stack frames: a method whose call THROWS fires&#xa;no probe, so coverage alone omits exactly the&#xa;chain that leads to the fault.&#xa;&#xa;Harness runs get NO network. Builds do." vertex="1">
+          <mxGeometry height="190" width="480" x="1720" y="2184" as="geometry" />
+        </mxCell>
+        <mxCell id="S11a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=4;fontSize=12;fontStyle=1" value="S11&#xa;PATH&#xa;the deliverable" vertex="1">
+          <mxGeometry height="190" width="170" x="40" y="2384" as="geometry" />
+        </mxCell>
+        <mxCell id="S11b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="entryPoint      ← S9&#xa;faultMethods    ← S5&#xa;oldRanges       ← S5&#xa;callGraphId     ← S7&#xa;reportId        ← S7&#xa;traceId         ← S10&#xa;reproducerTier  ← S10" vertex="1">
+          <mxGeometry height="190" width="420" x="215" y="2384" as="geometry" />
+        </mxCell>
+        <mxCell id="S11c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="AGENT  path-tracer   one per bug, waves of at most 4&#xa;&#xa;jvm_trace_executed    E  what actually ran&#xa;jvm_trace_path_in     E  order within the trace&#xa;jvm_callgraph_chains_to E  routes into the fault&#xa;jvm_callgraph_paths   E    jvm_callgraph_callers  E&#xa;jvm_class_hierarchy   E    jvm_method_body        E&#xa;jvm_method_at_line    E    jvm_coverage_lines     E&#xa;history_blame  E   history_diff  E&#xa;findings_record  R" vertex="1">
+          <mxGeometry height="190" width="600" x="640" y="2384" as="geometry" />
+        </mxCell>
+        <mxCell id="S11d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="path  ordered hops entryPoint → fault   → S12&#xa;   each hop: from, to, relation, carrier,&#xa;   old-side lines, executed?, cited evidence&#xa;pathTier   OBSERVED | HYPOTHESIZED&#xa;           | DISCONNECTED&#xa;pathFidelity  FULL | PARTIAL | UNIT&#xa;infectionPoint, propagationChannel&#xa;Finding(PATH)                          → S12" vertex="1">
+          <mxGeometry height="190" width="470" x="1245" y="2384" as="geometry" />
+        </mxCell>
+        <mxCell id="S11e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=4;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="THE DELIVERABLE. Both endpoints are known by&#xa;construction, so this is pathfinding between two&#xa;fixed points, not a search for an unknown fault.&#xa;&#xa;A hop is OBSERVED only when BOTH endpoint&#xa;methods appear in the executed set. This is&#xa;METHOD-level evidence: coverage records that a&#xa;method ran, not that an edge was taken.&#xa;&#xa;With a trace, the tracer works in&#xa;   G(parent) INTERSECT Ex(f)&#xa;Without one the path is drawn from the graph&#xa;alone and MUST be tiered HYPOTHESIZED.&#xa;&#xa;A route with no call edge is DISCONNECTED, and&#xa;that is a finding, not a failure." vertex="1">
+          <mxGeometry height="190" width="480" x="1720" y="2384" as="geometry" />
+        </mxCell>
+        <mxCell id="S12a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S12&#xa;PERSIST" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="2584" as="geometry" />
+        </mxCell>
+        <mxCell id="S12b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="every output above:&#xa;  importance, scoredOn  ← S8&#xa;  symptomClass          ← S9&#xa;  reproducerTier        ← S10&#xa;  path, pathFidelity    ← S11&#xa;  inducingCommit        ← S5&#xa;  failureClass          ← S6" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="2584" as="geometry" />
+        </mxCell>
+        <mxCell id="S12c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="graph_upsert_bug  P   idempotent MERGE&#xa;export_run        P   json or jsonl&#xa;graph_checkpoint  N&#xa;&#xa;Writes Bug, Commit, Repository nodes and the&#xa;FIXED_BY and HAS_COMMIT relationships.&#xa;Findings already carry SUPPORTED_BY edges to&#xa;the evidence that backs them." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="2584" as="geometry" />
+        </mxCell>
+        <mxCell id="S12d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Bug nodes, admitted and rejected alike&#xa;export file, survives a wiped database&#xa;   → S13, and to the researcher" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="2584" as="geometry" />
+        </mxCell>
+        <mxCell id="S12e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="Every write is an idempotent MERGE on a natural&#xa;key, so a resumed run overwrites rather than&#xa;duplicating. Runs are expected to be interrupted.&#xa;&#xa;The export includes bugs that FAILED admission,&#xa;for the same reason the graph keeps them: an&#xa;export of only admitted bugs hides the selection&#xa;bias behind a cleaner file." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="2584" as="geometry" />
+        </mxCell>
+        <mxCell id="S13a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=12;fontStyle=1" value="S13&#xa;REPORT" vertex="1">
+          <mxGeometry height="150" width="170" x="40" y="2744" as="geometry" />
+        </mxCell>
+        <mxCell id="S13b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="the graph        ← S12&#xa;checkpoint detail  ← all stages" vertex="1">
+          <mxGeometry height="150" width="420" x="215" y="2744" as="geometry" />
+        </mxCell>
+        <mxCell id="S13c" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="graph_query  N&#xa;graph_resume_state  N&#xa;&#xa;Every figure must come from a tool response or&#xa;a graph query. A stage that produced nothing&#xa;says so plainly rather than being omitted." vertex="1">
+          <mxGeometry height="150" width="600" x="640" y="2744" as="geometry" />
+        </mxCell>
+        <mxCell id="S13d" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="candidates per net, adjudication precision&#xa;estimated recall from the control net&#xa;admitted vs rejected, with the reason breakdown&#xa;reproducer tier distribution&#xa;path fidelity and tier distribution&#xa;FRACTION OF PATH STEPS OBSERVED  the headline&#xa;Unknown breakdown by reason, in full" vertex="1">
+          <mxGeometry height="150" width="470" x="1245" y="2744" as="geometry" />
+        </mxCell>
+        <mxCell id="S13e" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6" value="The Unknown breakdown is the dataset&#39;s honesty&#xa;report. It tells a consumer what the data can&#xa;and cannot support.&#xa;&#xa;A run with many BuildFailed entries produced&#xa;fewer observed paths, and the report says so&#xa;rather than presenting a smaller dataset as a&#xa;cleaner one." vertex="1">
+          <mxGeometry height="150" width="480" x="1720" y="2744" as="geometry" />
+        </mxCell>
+        <mxCell id="E01" edge="1" parent="1" source="S0a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S1a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E12" edge="1" parent="1" source="S1a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S2a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E23" edge="1" parent="1" source="S2a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S3a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E34" edge="1" parent="1" source="S3a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S4a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E45" edge="1" parent="1" source="S4a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S5a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E56" edge="1" parent="1" source="S5a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S6a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E67" edge="1" parent="1" source="S6a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S7a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E78" edge="1" parent="1" source="S7a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S8a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E89" edge="1" parent="1" source="S8a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S9a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E910" edge="1" parent="1" source="S9a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S10a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E1011" edge="1" parent="1" source="S10a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S11a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E1112" edge="1" parent="1" source="S11a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S12a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E1213" edge="1" parent="1" source="S12a" style="edgeStyle=none;html=1;endArrow=block;strokeColor=#000000;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="S13a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="LFT" parent="1" style="text;html=1;fontSize=15;fontStyle=1;align=left;" value="VARIABLE LIFELINES — each bar spans from the stage that PRODUCES a value to the last stage that CONSUMES it" vertex="1">
+          <mxGeometry height="24" width="1400" x="40" y="2930" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S0" vertex="1">
+          <mxGeometry height="24" width="126" x="420" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S1" vertex="1">
+          <mxGeometry height="24" width="126" x="546" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S2" vertex="1">
+          <mxGeometry height="24" width="126" x="672" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S3" vertex="1">
+          <mxGeometry height="24" width="126" x="798" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S4" vertex="1">
+          <mxGeometry height="24" width="126" x="924" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S5" vertex="1">
+          <mxGeometry height="24" width="126" x="1050" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S6" vertex="1">
+          <mxGeometry height="24" width="126" x="1176" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S7" vertex="1">
+          <mxGeometry height="24" width="126" x="1302" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S8" vertex="1">
+          <mxGeometry height="24" width="126" x="1428" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH9" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S9" vertex="1">
+          <mxGeometry height="24" width="126" x="1554" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH10" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S10" vertex="1">
+          <mxGeometry height="24" width="126" x="1680" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH11" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S11" vertex="1">
+          <mxGeometry height="24" width="126" x="1806" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH12" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S12" vertex="1">
+          <mxGeometry height="24" width="126" x="1932" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="LFH13" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=11;fontStyle=1" value="S13" vertex="1">
+          <mxGeometry height="24" width="126" x="2058" y="2962" as="geometry" />
+        </mxCell>
+        <mxCell id="V1n" parent="1" style="text;html=1;fontSize=11;align=left;" value="repoHandle" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="2994" as="geometry" />
+        </mxCell>
+        <mxCell id="V1b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="clone on disk, referenced by every history and forge call" vertex="1">
+          <mxGeometry height="22" width="1512" x="420" y="2992" as="geometry" />
+        </mxCell>
+        <mxCell id="V2n" parent="1" style="text;html=1;fontSize=11;align=left;" value="runId" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3020" as="geometry" />
+        </mxCell>
+        <mxCell id="V2b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="identifies the mining run; every checkpoint, finding and evidence row is filed under it" vertex="1">
+          <mxGeometry height="22" width="1764" x="420" y="3018" as="geometry" />
+        </mxCell>
+        <mxCell id="V3n" parent="1" style="text;html=1;fontSize=11;align=left;" value="buildRecipe" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3046" as="geometry" />
+        </mxCell>
+        <mxCell id="V3b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="base image, build tool, commands, entry points" vertex="1">
+          <mxGeometry height="22" width="1260" x="546" y="3044" as="geometry" />
+        </mxCell>
+        <mxCell id="V4n" parent="1" style="text;html=1;fontSize=11;align=left;" value="K   candidate set" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3072" as="geometry" />
+        </mxCell>
+        <mxCell id="V4b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="with per-net tags" vertex="1">
+          <mxGeometry height="22" width="378" x="672" y="3070" as="geometry" />
+        </mxCell>
+        <mxCell id="V5n" parent="1" style="text;html=1;fontSize=11;align=left;" value="forge bundle" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3098" as="geometry" />
+        </mxCell>
+        <mxCell id="V5b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="issues, PRs, CI, diff stats" vertex="1">
+          <mxGeometry height="22" width="882" x="798" y="3096" as="geometry" />
+        </mxCell>
+        <mxCell id="V6n" parent="1" style="text;html=1;fontSize=11;align=left;" value="F   confirmed bug fixes" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3124" as="geometry" />
+        </mxCell>
+        <mxCell id="V6b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="" vertex="1">
+          <mxGeometry height="22" width="378" x="924" y="3122" as="geometry" />
+        </mxCell>
+        <mxCell id="V7n" parent="1" style="text;html=1;fontSize=11;align=left;fontStyle=1" value="oldRanges : OldLines" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3150" as="geometry" />
+        </mxCell>
+        <mxCell id="V7b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C0C0C0;strokeColor=#000000;strokeWidth=2;fontSize=10;" value="the faulty lines, in PARENT coordinates" vertex="1">
+          <mxGeometry height="22" width="882" x="1050" y="3148" as="geometry" />
+        </mxCell>
+        <mxCell id="V8n" parent="1" style="text;html=1;fontSize=11;align=left;" value="faultMethods" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3176" as="geometry" />
+        </mxCell>
+        <mxCell id="V8b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="one endpoint of the path" vertex="1">
+          <mxGeometry height="22" width="882" x="1050" y="3174" as="geometry" />
+        </mxCell>
+        <mxCell id="V9n" parent="1" style="text;html=1;fontSize=11;align=left;" value="inducingCommit" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3202" as="geometry" />
+        </mxCell>
+        <mxCell id="V9b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="from SZZ; used for bug lifetime, never for path tracing" vertex="1">
+          <mxGeometry height="22" width="1008" x="1050" y="3200" as="geometry" />
+        </mxCell>
+        <mxCell id="V10n" parent="1" style="text;html=1;fontSize=11;align=left;" value="F_b   build-admitted" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3228" as="geometry" />
+        </mxCell>
+        <mxCell id="V10b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="" vertex="1">
+          <mxGeometry height="22" width="378" x="1176" y="3226" as="geometry" />
+        </mxCell>
+        <mxCell id="V11n" parent="1" style="text;html=1;fontSize=11;align=left;" value="buildHandle" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3254" as="geometry" />
+        </mxCell>
+        <mxCell id="V11b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="names a compiled tree; content-derived, so it survives a restart" vertex="1">
+          <mxGeometry height="22" width="630" x="1176" y="3252" as="geometry" />
+        </mxCell>
+        <mxCell id="V12n" parent="1" style="text;html=1;fontSize=11;align=left;" value="reportId   coverage" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3280" as="geometry" />
+        </mxCell>
+        <mxCell id="V12b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="queried at the PARENT with OLD-side ranges" vertex="1">
+          <mxGeometry height="22" width="630" x="1302" y="3278" as="geometry" />
+        </mxCell>
+        <mxCell id="V13n" parent="1" style="text;html=1;fontSize=11;align=left;" value="callGraphId" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3306" as="geometry" />
+        </mxCell>
+        <mxCell id="V13b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="G(parent): what is POSSIBLE" vertex="1">
+          <mxGeometry height="22" width="630" x="1302" y="3304" as="geometry" />
+        </mxCell>
+        <mxCell id="V14n" parent="1" style="text;html=1;fontSize=11;align=left;" value="importance + scoredOn" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3332" as="geometry" />
+        </mxCell>
+        <mxCell id="V14b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="scoredOn must travel with the score, always" vertex="1">
+          <mxGeometry height="22" width="630" x="1428" y="3330" as="geometry" />
+        </mxCell>
+        <mxCell id="V15n" parent="1" style="text;html=1;fontSize=11;align=left;fontStyle=1" value="entryPoint" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3358" as="geometry" />
+        </mxCell>
+        <mxCell id="V15b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C0C0C0;strokeColor=#000000;strokeWidth=2;fontSize=10;" value="where the symptom SURFACED: the other endpoint of the path" vertex="1">
+          <mxGeometry height="22" width="378" x="1554" y="3356" as="geometry" />
+        </mxCell>
+        <mxCell id="V16n" parent="1" style="text;html=1;fontSize=11;align=left;" value="symptomClass" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3384" as="geometry" />
+        </mxCell>
+        <mxCell id="V16b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="" vertex="1">
+          <mxGeometry height="22" width="504" x="1554" y="3382" as="geometry" />
+        </mxCell>
+        <mxCell id="V17n" parent="1" style="text;html=1;fontSize=11;align=left;" value="reproducerTier" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3410" as="geometry" />
+        </mxCell>
+        <mxCell id="V17b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#000000;fontSize=10;" value="T1..T4: decides whether the path can be OBSERVED at all" vertex="1">
+          <mxGeometry height="22" width="378" x="1680" y="3408" as="geometry" />
+        </mxCell>
+        <mxCell id="V18n" parent="1" style="text;html=1;fontSize=11;align=left;fontStyle=1" value="traceId" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3436" as="geometry" />
+        </mxCell>
+        <mxCell id="V18b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C0C0C0;strokeColor=#000000;strokeWidth=2;fontSize=10;" value="Ex(f): what ACTUALLY RAN when the symptom occurred" vertex="1">
+          <mxGeometry height="22" width="252" x="1680" y="3434" as="geometry" />
+        </mxCell>
+        <mxCell id="V19n" parent="1" style="text;html=1;fontSize=11;align=left;fontStyle=1" value="path + pathFidelity" vertex="1">
+          <mxGeometry height="20" width="370" x="40" y="3462" as="geometry" />
+        </mxCell>
+        <mxCell id="V19b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;fontColor=#FFFFFF;fontSize=10;fontStyle=1" value="THE DELIVERABLE" vertex="1">
+          <mxGeometry height="22" width="378" x="1806" y="3460" as="geometry" />
+        </mxCell>
+        <mxCell id="XCUT" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#000000;strokeWidth=2;fontSize=11;align=left;verticalAlign=top;spacingLeft=12;spacingTop=10" value="CROSS-CUTTING&#xa;&#xa;EXECUTION ISOLATION   everything past the build gate runs in a container. Builds and test runs get network, because dependency resolution needs it. Agent-authored harnesses do NOT.&#xa;                      Memory and CPU caps, wall-clock timeout, workspace bind-mount, shared dependency cache. Repository code and agent code are both treated as untrusted.&#xa;&#xa;RESUME                every stage checkpoints on (runId, stage, key) with an idempotent MERGE. A retry must reuse its key, or name what it supersedes; a retry under a NEW key leaves the&#xa;                      old row outstanding forever and the stage can never read as complete.&#xa;&#xa;NOTES vs EVIDENCE     notes influence what an agent DOES; evidence determines what an agent may SAY. Notes carry note_ ids, findings_record requires ^ev_, so a note is structurally&#xa;                      uncitable. The note kinds are ENVIRONMENT, CONVENTION, DEAD_END, FIXTURE, with deliberately no kind for assertions about bugs.&#xa;&#xa;HANDLES               large objects never enter an agent&#39;s context. Tools return an opaque, content-derived handle and the agent queries through it. A journal on disk lets a handle be&#xa;                      rehydrated after a restart instead of recomputed." vertex="1">
+          <mxGeometry height="190" width="2160" x="40" y="3510" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_coverage_run.json",
+  "name": "jvm_coverage_run",
+  "title": "jvm.coverage_run",
+  "description": "Run the project test suite under coverage instrumentation in a container. Measures the REPO’S OWN suite — the point is to reflect the project’s actual testing discipline, not a synthetic one. The report is AGGREGATE over the whole run: JaCoCo’s agent writes one exec dump at JVM exit, so a line marked covered was reached by SOME test, not by any identified one. Do not compute a per-test executed subgraph from it.",
+  "x-causeway": {
+    "class": "P",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "BuildFailed",
+      "TestsFailed",
+      "Timeout",
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "commit": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "engine": {
+        "enum": [
+          "jacoco",
+          "scoverage"
+        ]
+      },
+      "testCommand": {
+        "type": "string"
+      },
+      "timeoutSec": {
+        "type": "integer",
+        "description": "Default 1800."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "commit",
+      "buildHandle",
+      "engine"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "reportId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/reportId"
+      },
+      "engine": {
+        "type": "string"
+      },
+      "testsRun": {
+        "type": "integer",
+        "description": "Parsed from the build output when the format is recognised. ABSENT when it could not be parsed — a number is never invented to fill the field."
+      },
+      "testsFailed": {
+        "type": "integer"
+      },
+      "testsSkipped": {
+        "type": "integer"
+      },
+      "durationSec": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "reportId",
+      "engine"
+    ],
+    "additionalProperties": false
+  }
+}

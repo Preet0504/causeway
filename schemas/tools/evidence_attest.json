@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/evidence_attest.json",
+  "name": "evidence_attest",
+  "title": "evidence.attest",
+  "description": "Register a payload an agent obtained outside the server, returning an evidenceId marked provenance=Attested. DELIBERATELY GRANTED TO NO AGENT: with GitHub routed through forge.* and every other retrieval going through the ledger, nothing legitimately needs attestation, so every piece of evidence in the graph is ServerIssued and verifiable. The schema exists to define the capability and to record that we chose not to hand it out. Granting it to an agent weakens the integrity guarantee from verifiable to agent-transcribed — do that only with a stated reason.",
+  "x-causeway": {
+    "class": "R",
+    "module": "mcpserver",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "agent": {
+        "enum": [
+          "mining-strategist",
+          "bugfix-adjudicator",
+          "build-doctor",
+          "symptom-characterizer",
+          "reproducer-synthesist",
+          "path-tracer"
+        ]
+      },
+      "source": {
+        "type": "string",
+        "description": "Where it came from."
+      },
+      "payload": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "runId",
+      "agent",
+      "source",
+      "payload"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "evidenceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/evidenceId"
+      },
+      "provenance": {
+        "const": "Attested"
+      }
+    },
+    "required": [
+      "evidenceId",
+      "provenance"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_tests_for_change.json",
+  "name": "jvm_tests_for_change",
+  "title": "jvm.tests_for_change",
+  "description": "Test files and test methods added or modified by a commit. A regression test added alongside a production change is strong evidence of a bug fix — but its ABSENCE is neutral, never evidence against.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "symptom-characterizer",
+      "reproducer-synthesist"
+    ],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "commit": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      }
+    },
+    "required": [
+      "repoHandle",
+      "commit"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "testFilesTouched": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+        }
+      },
+      "testsAdded": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+            },
+            "method": {
+              "type": "string"
+            },
+            "startLine": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "file",
+            "method"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "testsModified": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+            },
+            "method": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "file",
+            "method"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "testLocRatio": {
+        "type": "number",
+        "description": "Test LOC changed over total LOC changed."
+      }
+    },
+    "required": [
+      "testFilesTouched",
+      "testsAdded",
+      "testsModified"
+    ],
+    "additionalProperties": false
+  }
+}

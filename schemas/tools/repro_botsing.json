@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/repro_botsing.json",
+  "name": "repro_botsing",
+  "title": "repro.botsing",
+  "description": "Search-based crash reproduction from a stack trace, via Botsing (ASE 2020, built on EvoSuite, extending EvoCrash). Applicable only when the symptom carries a stack trace; deterministic and consumes no agent budget, so it runs before any synthesis attempt.",
+  "x-causeway": {
+    "class": "P",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NoReproducer",
+      "Timeout",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "commit": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "stackTrace": {
+        "type": "string"
+      },
+      "targetFrame": {
+        "type": "integer",
+        "description": "Frame index to target. Default 1."
+      },
+      "budgetSec": {
+        "type": "integer",
+        "description": "Default 600."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "commit",
+      "buildHandle",
+      "stackTrace"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "reproduced": {
+        "type": "boolean"
+      },
+      "testSource": {
+        "type": "string"
+      },
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId"
+      },
+      "frameReached": {
+        "type": "integer"
+      },
+      "budgetUsedSec": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "reproduced",
+      "budgetUsedSec"
+    ],
+    "additionalProperties": false
+  }
+}

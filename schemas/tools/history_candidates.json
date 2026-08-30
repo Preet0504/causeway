@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/history_candidates.json",
+  "name": "history_candidates",
+  "title": "history.candidates",
+  "description": "Run the recall nets over a window and return candidate commits with the nets that matched. Emits NO verdict — deciding whether a candidate is a bug fix is reasoning and belongs to bugfix-adjudicator.",
+  "x-causeway": {
+    "class": "E",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist"
+    ],
+    "unknownReasons": [
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "ref": {
+        "$ref": "causeway://schemas/_common.json#/$defs/gitRef"
+      },
+      "since": {
+        "type": "string"
+      },
+      "maxCount": {
+        "type": "integer"
+      },
+      "nets": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/candidateNet"
+        }
+      },
+      "controlSampleSize": {
+        "type": "integer",
+        "description": "How many commits matched by NO net to sample anyway. This is how prefilter recall gets measured; 0 disables it and forfeits that metric."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "nets"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "candidates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "sha": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "matchedNets": {
+              "type": "array",
+              "items": {
+                "$ref": "causeway://schemas/_common.json#/$defs/candidateNet"
+              }
+            },
+            "issueRefs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "touchesTests": {
+              "type": "boolean"
+            },
+            "touchesSource": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sha",
+            "matchedNets",
+            "issueRefs",
+            "touchesTests",
+            "touchesSource"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "scanned": {
+        "type": "integer"
+      },
+      "perNetCounts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "integer"
+        }
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "candidates",
+      "scanned",
+      "perNetCounts",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

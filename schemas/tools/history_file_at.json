@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/history_file_at.json",
+  "name": "history_file_at",
+  "title": "history.file_at",
+  "description": "Read a file, or a slice of one, as it existed at a given commit.",
+  "x-causeway": {
+    "class": "E",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "build-doctor",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "path": {
+        "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+      },
+      "startLine": {
+        "type": "integer"
+      },
+      "endLine": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "repoHandle",
+      "sha",
+      "path"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "path": {
+        "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+      },
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "content": {
+        "type": "string"
+      },
+      "startLine": {
+        "type": "integer"
+      },
+      "endLine": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "path",
+      "sha",
+      "content",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

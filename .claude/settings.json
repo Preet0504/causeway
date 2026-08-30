@@ -1,0 +1,110 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__causeway__evidence_attest",
+      "mcp__causeway__export_run",
+      "mcp__causeway__findings_record",
+      "mcp__causeway__forge_bundle_candidates",
+      "mcp__causeway__forge_ci_status",
+      "mcp__causeway__forge_issue",
+      "mcp__causeway__forge_issue_comments",
+      "mcp__causeway__forge_pr_for_commit",
+      "mcp__causeway__graph_checkpoint",
+      "mcp__causeway__graph_query",
+      "mcp__causeway__graph_resume_state",
+      "mcp__causeway__graph_upsert_bug",
+      "mcp__causeway__history_blame",
+      "mcp__causeway__history_candidates",
+      "mcp__causeway__history_commit_meta",
+      "mcp__causeway__history_diff",
+      "mcp__causeway__history_file_at",
+      "mcp__causeway__history_list_commits",
+      "mcp__causeway__jvm_build_probe",
+      "mcp__causeway__jvm_build_toolchain",
+      "mcp__causeway__jvm_callgraph_build",
+      "mcp__causeway__jvm_callgraph_callers",
+      "mcp__causeway__jvm_callgraph_chains_to",
+      "mcp__causeway__jvm_callgraph_paths",
+      "mcp__causeway__jvm_class_hierarchy",
+      "mcp__causeway__jvm_coverage_lines",
+      "mcp__causeway__jvm_coverage_run",
+      "mcp__causeway__jvm_method_at_line",
+      "mcp__causeway__jvm_method_body",
+      "mcp__causeway__jvm_native_test_run",
+      "mcp__causeway__jvm_tests_for_change",
+      "mcp__causeway__jvm_trace_executed",
+      "mcp__causeway__jvm_trace_path_in",
+      "mcp__causeway__metrics_bug_lifetime",
+      "mcp__causeway__metrics_churn",
+      "mcp__causeway__metrics_complexity_delta",
+      "mcp__causeway__metrics_coverage_impact",
+      "mcp__causeway__notes_list_subjects",
+      "mcp__causeway__notes_read",
+      "mcp__causeway__notes_write",
+      "mcp__causeway__rank_importance",
+      "mcp__causeway__repo_checkout",
+      "mcp__causeway__repo_clone",
+      "mcp__causeway__repo_detect_ecosystem",
+      "mcp__causeway__repro_botsing",
+      "mcp__causeway__repro_evosuite_sweep",
+      "mcp__causeway__szz_baseline"
+    ],
+    "ask": [
+      "mcp__causeway__jvm_harness_run"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/telemetry.mjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/telemetry.mjs"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/telemetry.mjs"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/telemetry.mjs"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/telemetry.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/forge_ci_status.json",
+  "name": "forge_ci_status",
+  "title": "forge.ci_status",
+  "description": "Check runs for a commit. Also the most reliable source of a working build recipe: CI is the build the project actually runs.",
+  "x-causeway": {
+    "class": "E",
+    "module": "forge",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "build-doctor"
+    ],
+    "unknownReasons": [
+      "RateLimited",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle",
+        "description": "The clone to derive owner/name from. Passed rather than asking for owner/name so an agent cannot query one repository while analysing another."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "sha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "checks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "conclusion": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "string"
+            },
+            "completedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "conclusion"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "sha",
+      "checks"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/metrics_bug_lifetime.json",
+  "name": "metrics_bug_lifetime",
+  "title": "metrics.bug_lifetime",
+  "description": "Days from fault introduction to report and to fix. Depends on SZZ, so it is Unknown whenever SZZ found no inducing candidate.",
+  "x-causeway": {
+    "class": "P",
+    "module": "metrics",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "inducingSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "fixSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "reportedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "fixSha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "introducedToFixDays": {
+        "type": "integer"
+      },
+      "introducedToReportDays": {
+        "type": "integer"
+      },
+      "reportToFixDays": {
+        "type": "integer"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

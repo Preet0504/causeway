@@ -1,0 +1,13 @@
+# Sources are LF. Python's text-mode write converts to CRLF on Windows, which silently
+# breaks multi-line string fixtures — and core.autocrlf=true would reintroduce that on
+# every clone. Normalise in the repository and check out LF everywhere.
+* text=auto eol=lf
+
+# Binary, never touched.
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.jar binary
+*.zip binary
+*.exec binary

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/notes_read.json",
+  "name": "notes_read",
+  "title": "notes.read",
+  "description": "Read notes previously recorded for this repository, optionally filtered by kind or subject. Superseded notes are excluded by default. What you read here is a HINT, never a fact: it may be stale, it may have been written by an agent that was wrong, and it carries no evidence. Use it to decide what to try next or what not to retry — then verify through tools before asserting anything. A claim whose only backing is a note cannot be recorded, because notes carry note_* ids and findings.record requires ^ev_.",
+  "x-causeway": {
+    "class": "N",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist",
+      "bugfix-adjudicator",
+      "build-doctor",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "Truncated",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoSlug": {
+        "type": "string"
+      },
+      "kinds": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/noteKind"
+        }
+      },
+      "subjectContains": {
+        "type": "string"
+      },
+      "includeSuperseded": {
+        "type": "boolean",
+        "description": "Default false."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Default 25."
+      }
+    },
+    "required": [
+      "repoSlug"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "notes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "noteId": {
+              "$ref": "causeway://schemas/_common.json#/$defs/noteId"
+            },
+            "kind": {
+              "$ref": "causeway://schemas/_common.json#/$defs/noteKind"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "agent": {
+              "type": "string"
+            },
+            "runId": {
+              "$ref": "causeway://schemas/_common.json#/$defs/runId"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "superseded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "noteId",
+            "kind",
+            "subject",
+            "body",
+            "agent",
+            "createdAt",
+            "superseded"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "totalCount": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "notes",
+      "totalCount",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

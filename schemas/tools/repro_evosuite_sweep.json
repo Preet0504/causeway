@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/repro_evosuite_sweep.json",
+  "name": "repro_evosuite_sweep",
+  "title": "repro.evosuite_sweep",
+  "description": "Generate a test suite on the fault class with EvoSuite, then filter it differentially: keep only tests whose behaviour differs between parent and fix. The differential filter is ours — EvoSuite’s own regression mode is documented but reported discontinued in recent releases, so it is not depended upon.",
+  "x-causeway": {
+    "class": "P",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NoReproducer",
+      "Timeout",
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "fixSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "targetClass": {
+        "type": "string"
+      },
+      "budgetSec": {
+        "type": "integer",
+        "description": "Default 600."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "fixSha",
+      "buildHandle",
+      "targetClass"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "generated": {
+        "type": "integer"
+      },
+      "differentiating": {
+        "type": "integer"
+      },
+      "testSource": {
+        "type": "string"
+      },
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId"
+      },
+      "budgetUsedSec": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "generated",
+      "differentiating",
+      "budgetUsedSec"
+    ],
+    "additionalProperties": false
+  }
+}

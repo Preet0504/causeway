@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/graph_resume_state.json",
+  "name": "graph_resume_state",
+  "title": "graph.resume_state",
+  "description": "What a prior run on this repository already completed, per stage and per candidate. Call this FIRST on every run: re-mining costs budget and produces nothing new.",
+  "x-causeway": {
+    "class": "E",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist"
+    ],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoUrl": {
+        "type": "string"
+      },
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      }
+    },
+    "required": [
+      "repoUrl"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "stages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "stage": {
+              "type": "string"
+            },
+            "done": {
+              "type": "integer"
+            },
+            "pending": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "stage",
+            "done",
+            "pending"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "lastCheckpointAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "complete",
+      "stages"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/metrics_coverage_impact.json",
+  "name": "metrics_coverage_impact",
+  "title": "metrics.coverage_impact",
+  "description": "The two selected coverage-impact metrics: whether the faulty lines were covered before the fix, and the line-coverage delta on touched files. If the build failed, both are Unknown(BuildFailed) — never 0.0. A build failure and genuinely zero coverage are different facts and must stay distinguishable.",
+  "x-causeway": {
+    "class": "P",
+    "module": "metrics",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "BuildFailed",
+      "TestsFailed",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "preReportId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/reportId"
+      },
+      "postReportId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/reportId"
+      },
+      "hunks": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/hunk"
+        }
+      }
+    },
+    "required": [
+      "preReportId",
+      "hunks"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "preFixFaultyLineCoverage": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+            },
+            "line": {
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "causeway://schemas/_common.json#/$defs/coverageStatus"
+            }
+          },
+          "required": [
+            "file",
+            "line",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "faultyLinesCoveredFraction": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "touchedFileCoverageDelta": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "preFixFaultyLineCoverage",
+      "faultyLinesCoveredFraction"
+    ],
+    "additionalProperties": false
+  }
+}

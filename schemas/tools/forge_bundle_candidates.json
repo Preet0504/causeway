@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/forge_bundle_candidates.json",
+  "name": "forge_bundle_candidates",
+  "title": "forge.bundle_candidates",
+  "description": "Batched evidence bundle for many candidates in one GraphQL round trip: message, diffstat, linked issue, labels, CI status, test-touch flag. Adjudicators arrive with evidence already in hand, which is what makes parallel adjudication affordable.",
+  "x-causeway": {
+    "class": "E",
+    "module": "forge",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator"
+    ],
+    "unknownReasons": [
+      "RateLimited",
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "shas": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+        }
+      }
+    },
+    "required": [
+      "repoHandle",
+      "shas"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "bundles": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "sha": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "linesAdded": {
+              "type": "integer"
+            },
+            "linesDeleted": {
+              "type": "integer"
+            },
+            "filesTouched": {
+              "type": "integer"
+            },
+            "touchesTests": {
+              "type": "boolean"
+            },
+            "touchesSource": {
+              "type": "boolean"
+            },
+            "issue": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "state": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            "ciConclusion": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sha",
+            "subject",
+            "linesAdded",
+            "linesDeleted",
+            "filesTouched",
+            "touchesTests",
+            "touchesSource"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "bundles"
+    ],
+    "additionalProperties": false
+  }
+}

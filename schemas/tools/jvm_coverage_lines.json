@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_coverage_lines.json",
+  "name": "jvm_coverage_lines",
+  "title": "jvm.coverage_lines",
+  "description": "Per-line coverage for a range. Query the PARENT commit with OLD-side ranges — using new-side line numbers against the parent revision returns a different method’s lines and is silently wrong. Coverage is AGGREGATE over the test run: a COVERED line was executed by some test, not by an identified one, so this cannot be narrowed to a single test.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "reportId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/reportId"
+      },
+      "file": {
+        "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+      },
+      "range": {
+        "$ref": "causeway://schemas/_common.json#/$defs/oldLines"
+      }
+    },
+    "required": [
+      "reportId",
+      "file",
+      "range"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "file": {
+        "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+      },
+      "lines": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "line": {
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "causeway://schemas/_common.json#/$defs/coverageStatus"
+            },
+            "hitCount": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "line",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "file",
+      "lines"
+    ],
+    "additionalProperties": false
+  }
+}

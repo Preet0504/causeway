@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/notes_write.json",
+  "name": "notes_write",
+  "title": "notes.write",
+  "description": "Record procedural or environmental knowledge that is expensive to re-derive, scoped to a repository and surviving across runs. Returns a note_* id, NOT an evidenceId — notes are structurally uncitable in findings.record. Write a note when a later agent would otherwise repeat work you already did: how this project bootstraps its fixtures, that harnesses at a given entry point need a config file, that this repo references issues as CSV-nnn rather than #nnn. Do NOT write claims about bugs; the kind enum has no member for them, and that is on purpose.",
+  "x-causeway": {
+    "class": "N",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist",
+      "bugfix-adjudicator",
+      "build-doctor",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoSlug": {
+        "type": "string",
+        "description": "owner/name — notes are per-repository and persist across runs."
+      },
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "agent": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "causeway://schemas/_common.json#/$defs/noteKind"
+      },
+      "subject": {
+        "type": "string",
+        "description": "What the note is about — a build tool, an entry point, a commit convention. Used for retrieval."
+      },
+      "body": {
+        "type": "string",
+        "maxLength": 4000
+      },
+      "supersedes": {
+        "$ref": "causeway://schemas/_common.json#/$defs/noteId",
+        "description": "Mark an earlier note obsolete rather than accumulating contradictory advice."
+      }
+    },
+    "required": [
+      "repoSlug",
+      "runId",
+      "agent",
+      "kind",
+      "subject",
+      "body"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "noteId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/noteId"
+      },
+      "supersededCount": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "noteId"
+    ],
+    "additionalProperties": false
+  }
+}

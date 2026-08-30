@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "causeway": {
+      "command": "java",
+      "args": [
+        "-Xmx6g",
+        "-XX:+ExitOnOutOfMemoryError",
+        "-cp",
+        "target/dist/lib/*",
+        "causeway.app.Main"
+      ],
+      "env": {
+        "CAUSEWAY_SCHEMAS": "${CAUSEWAY_SCHEMAS:-schemas}",
+        "CAUSEWAY_WORKSPACE": "${CAUSEWAY_WORKSPACE:-./workspace}",
+        "CAUSEWAY_BUILD_SLOTS": "2",
+        "CAUSEWAY_HARNESS_TIMEOUT_SEC": "120",
+        "CAUSEWAY_HARNESS_MEMORY_MB": "2048"
+      }
+    }
+  }
+}

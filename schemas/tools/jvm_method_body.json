@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_method_body.json",
+  "name": "jvm_method_body",
+  "title": "jvm.method_body",
+  "description": "Source of a method plus a bytecode summary. A call edge says control can flow; the body says what value or state actually carries the fault.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NoDebugInfo",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "method": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      }
+    },
+    "required": [
+      "buildHandle",
+      "method"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "method": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "source": {
+        "type": "string"
+      },
+      "sourceStartLine": {
+        "type": "integer"
+      },
+      "branchCount": {
+        "type": "integer"
+      },
+      "cyclomaticComplexity": {
+        "type": "integer"
+      },
+      "invokedMethods": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+        }
+      }
+    },
+    "required": [
+      "method",
+      "source"
+    ],
+    "additionalProperties": false
+  }
+}

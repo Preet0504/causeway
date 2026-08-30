@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_build_probe.json",
+  "name": "jvm_build_probe",
+  "title": "jvm.build_probe",
+  "description": "Compile one revision in a container. COMPILE ONLY, no tests: a compile failure surfaces in seconds where a full test run would take minutes, and this gates every expensive stage. The failure classification is load-bearing — JDK_MISMATCH is recoverable by choosing another base image, DEPENDENCY_RESOLUTION usually is not.",
+  "x-causeway": {
+    "class": "P",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "build-doctor"
+    ],
+    "unknownReasons": [
+      "BuildFailed",
+      "Timeout",
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "commit": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "baseImage": {
+        "type": "string",
+        "description": "Container image, e.g. eclipse-temurin:11-jdk."
+      },
+      "buildTool": {
+        "$ref": "causeway://schemas/_common.json#/$defs/jvmBuildTool"
+      },
+      "command": {
+        "type": "string"
+      },
+      "flags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "timeoutSec": {
+        "type": "integer",
+        "description": "Default 600."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "commit",
+      "baseImage"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "succeeded": {
+        "type": "boolean"
+      },
+      "buildHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildHandle"
+      },
+      "artifacts": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+        }
+      },
+      "classpath": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "failureClass": {
+        "$ref": "causeway://schemas/_common.json#/$defs/buildFailureClass"
+      },
+      "exitCode": {
+        "type": "integer"
+      },
+      "stderrTail": {
+        "type": "string"
+      },
+      "durationSec": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "succeeded",
+      "durationSec"
+    ],
+    "additionalProperties": false
+  }
+}

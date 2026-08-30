@@ -1,0 +1,44 @@
+# Neo4j Community for causeway's graph store.
+#
+#   docker compose -f ops/docker-compose.yml up -d
+#   docker compose -f ops/docker-compose.yml down          # keeps data
+#   docker compose -f ops/docker-compose.yml down -v       # wipes data
+#
+# Browser: http://localhost:7475   Bolt: bolt://localhost:7690
+#
+# NON-STANDARD PORTS ON PURPOSE. This machine already runs another project's Neo4j
+# (`uce-client-neo4j`) on the default 7474/7687, and causeway must not collide with it.
+# Override with CAUSEWAY_NEO4J_HTTP_PORT / CAUSEWAY_NEO4J_BOLT_PORT if these are taken too.
+#
+# The password here is a local development default and is fine to keep in the repo — this
+# instance listens on localhost only and holds mined public-repository data. Override it with
+# NEO4J_PASSWORD if you expose the port.
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: causeway-neo4j
+    ports:
+      - "${CAUSEWAY_NEO4J_HTTP_PORT:-7475}:7474"   # HTTP browser
+      - "${CAUSEWAY_NEO4J_BOLT_PORT:-7690}:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-causeway-dev}"
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "2G"
+      NEO4J_server_memory_pagecache_size: "512m"
+      # APOC is not required; leave it out so the image starts clean.
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      # Testcontainers-based integration tests wait on this rather than sleeping.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  neo4j-data:
+  neo4j-logs:

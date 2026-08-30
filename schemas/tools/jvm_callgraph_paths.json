@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_callgraph_paths.json",
+  "name": "jvm_callgraph_paths",
+  "title": "jvm.callgraph_paths",
+  "description": "Find call paths between two methods. An empty result is a real answer, not an error: reflection, dependency injection, dynamic proxies and native calls are all invisible to a static call graph.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "Timeout",
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "callGraphId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/callGraphId"
+      },
+      "from": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "to": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "maxLen": {
+        "type": "integer",
+        "description": "Default 12."
+      },
+      "maxPaths": {
+        "type": "integer",
+        "description": "Default 10."
+      }
+    },
+    "required": [
+      "callGraphId",
+      "from",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "paths": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+          }
+        }
+      },
+      "searchExhausted": {
+        "type": "boolean"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "paths",
+      "searchExhausted",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

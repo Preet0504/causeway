@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/history_list_commits.json",
+  "name": "history_list_commits",
+  "title": "history.list_commits",
+  "description": "Walk commit history within a window. Used by the strategist to size a run before committing budget to it.",
+  "x-causeway": {
+    "class": "E",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist"
+    ],
+    "unknownReasons": [
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "ref": {
+        "$ref": "causeway://schemas/_common.json#/$defs/gitRef"
+      },
+      "since": {
+        "type": "string",
+        "description": "ISO-8601 date."
+      },
+      "until": {
+        "type": "string",
+        "description": "ISO-8601 date."
+      },
+      "maxCount": {
+        "type": "integer",
+        "description": "Hard cap on returned commits."
+      },
+      "paths": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+        }
+      }
+    },
+    "required": [
+      "repoHandle"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "commits": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "sha": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "author": {
+              "type": "string"
+            },
+            "authorDate": {
+              "type": "string"
+            },
+            "committerDate": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "parents": {
+              "type": "array",
+              "items": {
+                "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+              }
+            },
+            "isMerge": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sha",
+            "author",
+            "authorDate",
+            "subject",
+            "parents",
+            "isMerge"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "scanned": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "commits",
+      "scanned",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

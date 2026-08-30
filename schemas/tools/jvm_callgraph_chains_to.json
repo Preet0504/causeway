@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_callgraph_chains_to.json",
+  "name": "jvm_callgraph_chains_to",
+  "title": "jvm.callgraph_chains_to",
+  "description": "Enumerate call chains from public entry points down to a target method, with the parameter types each hop requires. This is what the synthesist needs to know what to call, in what order, and with what shape of argument.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "Truncated",
+      "Timeout",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "callGraphId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/callGraphId"
+      },
+      "target": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "maxLen": {
+        "type": "integer",
+        "description": "Default 10."
+      },
+      "maxChains": {
+        "type": "integer",
+        "description": "Default 20."
+      },
+      "onlyPublicEntries": {
+        "type": "boolean",
+        "description": "Default true."
+      }
+    },
+    "required": [
+      "callGraphId",
+      "target"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "chains": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "hops": {
+              "type": "array",
+              "items": {
+                "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+              }
+            },
+            "entryIsPublic": {
+              "type": "boolean",
+              "description": "Approximated by the entry method having no callers in this graph. ABSENT when the caller lookup itself failed — undetermined, not false. A chain whose entry could not be judged is never filtered out by onlyPublicEntries: a measurement that could not be made is not evidence against the chain."
+            },
+            "length": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "hops",
+            "length"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "truncated": {
+        "type": "boolean"
+      },
+      "filteredNonPublicEntries": {
+              "type": "integer",
+              "description": "Chains dropped by onlyPublicEntries. Filtering happens AFTER truncation, so without this an empty result cannot be told from no chains existing. Chains whose entry could not be judged are KEPT, never filtered out."
+      }
+    },
+    "required": [
+      "chains",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

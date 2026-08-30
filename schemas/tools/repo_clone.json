@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/repo_clone.json",
+  "name": "repo_clone",
+  "title": "repo.clone",
+  "description": "Clone a public repository in full. Shallow clones are refused: blame and SZZ require complete history.",
+  "x-causeway": {
+    "class": "P",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "Timeout",
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "description": "HTTPS clone URL."
+      },
+      "refresh": {
+        "type": "boolean",
+        "description": "Re-fetch if already cloned. Default false."
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "localPath": {
+        "type": "string"
+      },
+      "defaultBranch": {
+        "type": "string"
+      },
+      "headSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "sizeBytes": {
+        "type": "integer"
+      },
+      "commitCount": {
+        "type": "integer"
+      },
+      "refreshed": {
+              "type": "boolean",
+              "description": "Present only when refresh was requested on an EXISTING clone. False means the fetch failed and the clone is stale but usable \u2014 see refreshError."
+      },
+      "refsUpdated": {
+              "type": "integer",
+              "description": "Refs the fetch moved. 0 means already current."
+      },
+      "refreshError": {
+              "type": "string",
+              "description": "Why the fetch failed. A stale clone still answers every historical question, so this is reported rather than fatal."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "localPath",
+      "defaultBranch",
+      "headSha"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/forge_issue_comments.json",
+  "name": "forge_issue_comments",
+  "title": "forge.issue_comments",
+  "description": "Fetch an issue discussion thread. Escalate to this only when the issue body alone leaves the judgment ambiguous.",
+  "x-causeway": {
+    "class": "E",
+    "module": "forge",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "RateLimited",
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "number": {
+        "type": "integer"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Default 50."
+      },
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle",
+        "description": "The clone to derive owner/name from. Passed rather than asking for owner/name so an agent cannot query one repository while analysing another."
+      }
+    },
+    "required": [
+      "repoHandle",
+      "number"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "number": {
+        "type": "integer"
+      },
+      "comments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "author": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "author",
+            "body",
+            "createdAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "number",
+      "comments",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

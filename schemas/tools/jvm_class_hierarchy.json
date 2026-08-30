@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_class_hierarchy.json",
+  "name": "jvm_class_hierarchy",
+  "title": "jvm.class_hierarchy",
+  "description": "Supertypes, subtypes, and overrides for a type. Often the reason a call path appears disconnected: the connection runs through an interface rather than a direct edge.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "callGraphId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/callGraphId"
+      },
+      "fqcn": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "callGraphId",
+      "fqcn"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "fqcn": {
+        "type": "string"
+      },
+      "supertypes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "subtypes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "overrides": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+            },
+            "declaredIn": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "declaredIn"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "fqcn",
+      "supertypes",
+      "subtypes"
+    ],
+    "additionalProperties": false
+  }
+}

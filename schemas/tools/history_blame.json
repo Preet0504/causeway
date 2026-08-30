@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/history_blame.json",
+  "name": "history_blame",
+  "title": "history.blame",
+  "description": "Blame a line range, ignoring whitespace-only changes so reformatting commits are not credited with authorship they do not have.",
+  "x-causeway": {
+    "class": "E",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "path": {
+        "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+      },
+      "range": {
+        "$ref": "causeway://schemas/_common.json#/$defs/oldLines"
+      }
+    },
+    "required": [
+      "repoHandle",
+      "sha",
+      "path",
+      "range"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "lines": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "line": {
+              "type": "integer"
+            },
+            "commit": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "author": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string"
+            },
+            "originalLine": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "line",
+            "commit",
+            "author",
+            "date"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "lines"
+    ],
+    "additionalProperties": false
+  }
+}

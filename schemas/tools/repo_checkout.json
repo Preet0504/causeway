@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/repo_checkout.json",
+  "name": "repo_checkout",
+  "title": "repo.checkout",
+  "description": "Materialise one commit into an isolated worktree. Parent and fix revisions are checked out simultaneously for differential execution, so each gets its own tree.",
+  "x-causeway": {
+    "class": "P",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "Timeout",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "commit": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      }
+    },
+    "required": [
+      "repoHandle",
+      "commit"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "worktreePath": {
+        "type": "string"
+      },
+      "commit": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      }
+    },
+    "required": [
+      "worktreePath",
+      "commit"
+    ],
+    "additionalProperties": false
+  }
+}

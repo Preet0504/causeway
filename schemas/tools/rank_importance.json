@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/rank_importance.json",
+  "name": "rank_importance",
+  "title": "rank.importance",
+  "description": "Rank bugs by coverage of changed lines, blast radius, and symptom distance. Each dimension is scored INDEPENDENTLY and the composite is computed only over Known dimensions, with scoredOn recorded. A weighted sum would drive a symptom-less bug to zero, making a missing signal act as evidence against it.",
+  "x-causeway": {
+    "class": "P",
+    "module": "metrics",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "bugs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "fixSha": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "faultyLinesCoveredFraction": {
+              "type": "number"
+            },
+            "blastRadius": {
+              "type": "integer"
+            },
+            "symptomDistance": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "fixSha"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "runId",
+      "bugs"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "ranked": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "fixSha": {
+              "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+            },
+            "composite": {
+              "type": "number"
+            },
+            "dimensions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "scoredOn": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rank": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "fixSha",
+            "composite",
+            "scoredOn",
+            "rank"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "ranked"
+    ],
+    "additionalProperties": false
+  }
+}

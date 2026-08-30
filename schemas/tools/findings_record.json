@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/findings_record.json",
+  "name": "findings_record",
+  "title": "findings.record",
+  "description": "The only way an agent may persist a claim. Every cited evidenceId is validated against this run’s ledger; a claim citing an id the ledger never issued is REJECTED. An agent cannot assert what it did not retrieve — rejection means go retrieve it, not rephrase it.",
+  "x-causeway": {
+    "class": "R",
+    "module": "mcpserver",
+    "permission": "allow",
+    "agents": [
+      "mining-strategist",
+      "bugfix-adjudicator",
+      "build-doctor",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "agent": {
+        "enum": [
+          "mining-strategist",
+          "bugfix-adjudicator",
+          "build-doctor",
+          "symptom-characterizer",
+          "reproducer-synthesist",
+          "path-tracer"
+        ]
+      },
+      "subject": {
+        "type": "string",
+        "description": "What the claim is about, e.g. a commit SHA."
+      },
+      "claimType": {
+        "enum": [
+          "VERDICT",
+          "SYMPTOM",
+          "BUILD_RECIPE",
+          "REPRODUCER",
+          "PATH",
+          "STRATEGY"
+        ]
+      },
+      "claim": {
+        "type": "object"
+      },
+      "confidence": {
+        "$ref": "causeway://schemas/_common.json#/$defs/confidence"
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/evidenceId"
+        },
+        "minItems": 1,
+        "description": "Non-empty by construction. An unevidenced claim is not representable."
+      },
+      "gaps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "$ref": "causeway://schemas/_common.json#/$defs/unknownReason"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "runId",
+      "agent",
+      "subject",
+      "claimType",
+      "claim",
+      "evidence"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "accepted": {
+        "type": "boolean"
+      },
+      "findingId": {
+        "type": "string"
+      },
+      "rejectedEvidence": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/evidenceId"
+        }
+      },
+      "rejectionReason": {
+        "type": "string"
+      },
+      "persisted": {
+        "type": "boolean",
+        "description": "Whether the accepted finding reached durable storage. FALSE means it was accepted and validated but exists only in memory — it will be lost when the server exits. Reported separately from `accepted` because a claim that is accepted and then silently evaporates is exactly the quiet failure this project is built to avoid."
+      }
+    },
+    "required": [
+      "accepted",
+      "persisted"
+    ],
+    "additionalProperties": false
+  }
+}

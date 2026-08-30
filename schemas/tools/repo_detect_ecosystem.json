@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/repo_detect_ecosystem.json",
+  "name": "repo_detect_ecosystem",
+  "title": "repo.detect_ecosystem",
+  "description": "Determine which analysis pipeline this repository routes to. Decided once per run and never revisited.",
+  "x-causeway": {
+    "class": "P",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "ref": {
+        "$ref": "causeway://schemas/_common.json#/$defs/gitRef"
+      }
+    },
+    "required": [
+      "repoHandle"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "ecosystem": {
+        "$ref": "causeway://schemas/_common.json#/$defs/ecosystem"
+      },
+      "buildTool": {
+        "type": "string",
+        "description": "Detected build tool, if any."
+      },
+      "markerFiles": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/filePath"
+        }
+      },
+      "languageBreakdown": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        },
+        "description": "Fraction of source bytes per language."
+      }
+    },
+    "required": [
+      "ecosystem",
+      "markerFiles"
+    ],
+    "additionalProperties": false
+  }
+}

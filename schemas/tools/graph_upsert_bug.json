@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/graph_upsert_bug.json",
+  "name": "graph_upsert_bug",
+  "title": "graph.upsert_bug",
+  "description": "Persist one bug and everything attached to it. Idempotent MERGE on natural keys, so a resumed run overwrites rather than duplicating. Bugs failing admission are stored with admitted=false and a reason — never deleted, or the dataset’s selection bias becomes invisible.",
+  "x-causeway": {
+    "class": "P",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "record": {
+        "type": "object",
+        "description": "Full bug record: fix, hunks, symptom, reproducer, path, metrics, evidence refs."
+      }
+    },
+    "required": [
+      "runId",
+      "record"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "nodeId": {
+        "type": "string"
+      },
+      "created": {
+        "type": "boolean"
+      },
+      "relationshipsWritten": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "nodeId",
+      "created"
+    ],
+    "additionalProperties": false
+  }
+}

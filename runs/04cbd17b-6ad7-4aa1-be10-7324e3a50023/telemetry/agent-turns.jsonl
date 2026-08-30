@@ -1,0 +1,13 @@
+{"ts":"2026-08-23T04:13:53.815Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"ad0ea6dd25a4c866e","agent":"build-doctor","event":"start","effort":null}
+{"ts":"2026-08-23T04:14:05.737Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"ae0759c8e0b76667e","agent":"mining-strategist","event":"start","effort":null}
+{"ts":"2026-08-23T04:19:26.649Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"ae0759c8e0b76667e","agent":"mining-strategist","event":"stop","finalMessageChars":6645}
+{"ts":"2026-08-23T04:23:09.980Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"ad0ea6dd25a4c866e","agent":"build-doctor","event":"stop","finalMessageChars":4672}
+{"ts":"2026-08-23T04:23:15.449Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a92735ec81db124e9","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T04:23:34.925Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a7a2dc6dd3b180495","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T04:23:51.181Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a364dfef1c3c0aefc","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T04:24:48.959Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a779e732d3e714d44","agent":"bugfix-adjudicator","event":"start","effort":null}
+{"ts":"2026-08-23T04:26:18.050Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a92735ec81db124e9","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":4010}
+{"ts":"2026-08-23T04:26:25.100Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a7a2dc6dd3b180495","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":2608}
+{"ts":"2026-08-23T04:27:16.798Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a364dfef1c3c0aefc","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":3295}
+{"ts":"2026-08-23T04:27:52.287Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":"a779e732d3e714d44","agent":"bugfix-adjudicator","event":"stop","finalMessageChars":2799}
+{"ts":"2026-08-23T14:01:07.446Z","sessionId":"04cbd17b-6ad7-4aa1-be10-7324e3a50023","agentId":null,"agent":"orchestrator","event":"session-end","transcriptPath":"C:\\Users\\Lenovo\\.claude\\projects\\f--UIC-Agentic-Workflows-repo-bugs-extraction\\04cbd17b-6ad7-4aa1-be10-7324e3a50023.jsonl"}

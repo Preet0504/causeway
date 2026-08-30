@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_native_test_run.json",
+  "name": "jvm_native_test_run",
+  "title": "jvm.native_test_run",
+  "description": "Run the PROJECT'S OWN test at both revisions and compare. This is rung 1 of the reproducer ladder: when a fix ships a regression test, that test is the highest-fidelity reproducer available, because the person who fixed the bug wrote it to capture exactly the condition that was broken. It should FAIL at the parent and PASS at the fix, and that difference is the differential oracle with no synthesis involved. The parent run is instrumented, so the executed method set is captured and registered as a trace: this is what turns a HYPOTHESIZED path into an OBSERVED one. Per D27 that set is coverage UNION the failing run's stack-trace frames, because a method whose call THROWS records no JaCoCo probe and would otherwise be missing from exactly the chain that leads to the fault; frames are matched by class and name only, since a stack trace carries no descriptor. A fix that ADDS its regression test is the normal case, and that test does not exist at the parent, so the fix's test sources are PORTED onto the parent worktree before the parent side runs — the production code at the parent is untouched. Porting is SCOPED to the test classes named in the selector: a sibling test file the fix also changed is left at the parent's own version, because one uncompilable sibling fails the whole module's test compile and would block a selector that has nothing to do with it. If the ported test cannot compile against the parent's production code, the test cannot run there and the result is Unknown(TestsFailed), not a pass. Distinct from jvm_harness_run, which compiles agent-authored source with plain javac and cannot run a JUnit test.",
+  "x-causeway": {
+    "class": "P",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "BuildFailed",
+      "TestsFailed",
+      "Timeout",
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "fixSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "testSelector": {
+        "type": "string",
+        "description": "Build-tool test selector, for example 'SelectorTest#attributeSelectorHandlesInternalData' for Maven or 'org.jsoup.select.SelectorTest.attributeSelectorHandlesInternalData' for Gradle. Passed through to the build tool; a selector matching nothing yields Unknown(TestsFailed) rather than a vacuous pass."
+      },
+      "baseImage": {
+        "type": "string",
+        "description": "Container image. Defaults to the image recorded for the parent build when one exists."
+      },
+      "timeoutSec": {
+        "type": "integer",
+        "description": "Per side. Default 900."
+      }
+    },
+    "required": ["repoHandle", "fixSha", "testSelector"],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "testSelector": {
+        "type": "string"
+      },
+      "failsAtParent": {
+        "type": "boolean",
+        "description": "The test ran at the parent and did NOT pass. This is the half that proves the test captures the defect."
+      },
+      "passesAtFix": {
+        "type": "boolean",
+        "description": "The test ran at the fix and passed. Without this the test is simply broken, not a reproducer."
+      },
+      "differs": {
+        "type": "boolean",
+        "description": "failsAtParent AND passesAtFix. True means rung 1 succeeded and the bug is T1_NATIVE."
+      },
+      "differsOn": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["EXCEPTION", "RETURN", "ASSERTION"] },
+        "description": "How the two sides differed. ASSERTION is the usual outcome for a regression test; EXCEPTION when the parent threw rather than failing an assertion."
+      },
+      "resultAtParent": {
+        "type": "string",
+        "description": "Failure message or exception from the parent run, truncated."
+      },
+      "resultAtFix": {
+        "type": "string"
+      },
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId",
+        "description": "Registered from the PARENT run's instrumentation, so the executed set is what ran while the symptom occurred. Absent when instrumentation produced nothing."
+      },
+      "executedMethodCount": {
+        "type": "integer"
+      },
+      "testsPorted": {
+        "type": "boolean",
+        "description": "The fix's test sources were copied onto the parent worktree before the parent run. False means both revisions ran their own tests unmodified."
+      },
+      "portedTestFiles": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Repository-relative test files actually overlaid onto the parent, after scoping to the selector's classes."
+      },
+      "portSkippedFiles": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Test files the fix changed that were deliberately NOT ported, because no class named in the selector lives in them. Present so a caller can tell scoping from an empty diff."
+      },
+      "frameMethodCount": {
+        "type": "integer",
+        "description": "Methods contributed to the executed set by stack-trace frames rather than by coverage probes (D27). A large value on an EXCEPTION-channel bug is expected, not suspicious."
+      },
+      "durationSec": {
+        "type": "integer"
+      }
+    },
+    "required": ["testSelector", "failsAtParent", "passesAtFix", "differs"],
+    "additionalProperties": false
+  }
+}

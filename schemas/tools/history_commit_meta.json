@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/history_commit_meta.json",
+  "name": "history_commit_meta",
+  "title": "history.commit_meta",
+  "description": "Full metadata for one commit, including parsed trailers and any issue references found in the message.",
+  "x-causeway": {
+    "class": "E",
+    "module": "vcs",
+    "permission": "allow",
+    "agents": [
+      "bugfix-adjudicator",
+      "symptom-characterizer",
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      }
+    },
+    "required": [
+      "repoHandle",
+      "sha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "sha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      },
+      "message": {
+        "type": "string"
+      },
+      "author": {
+        "type": "string"
+      },
+      "committer": {
+        "type": "string"
+      },
+      "authorDate": {
+        "type": "string"
+      },
+      "commitDate": {
+        "type": "string"
+      },
+      "parents": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+        }
+      },
+      "trailers": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "issueRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "description": "Issue reference as written, e.g. \"#412\" or \"CSV-118\"."
+        }
+      }
+    },
+    "required": [
+      "sha",
+      "message",
+      "author",
+      "authorDate",
+      "parents",
+      "issueRefs"
+    ],
+    "additionalProperties": false
+  }
+}

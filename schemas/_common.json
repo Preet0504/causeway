@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/_common.json",
+  "title": "Shared definitions for causeway tool schemas",
+  "description": "Every tool file's outputSchema describes ONLY the `data` payload. The response envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver — never restate it per tool. A tool's x-causeway.unknownReasons lists the reasons it may legitimately return; the server rejects any other.",
+  "$defs": {
+    "commitId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Full 40-hex commit SHA. Abbreviated SHAs are rejected — ambiguity is not resolvable downstream."
+    },
+    "gitRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Branch, tag, or full SHA."
+    },
+    "runId": { "type": "string", "pattern": "^run_[0-9a-f]{16}$" },
+    "evidenceId": { "type": "string", "pattern": "^ev_[0-9a-f]{16,64}$" },
+    "repoHandle": { "type": "string", "pattern": "^repo_[0-9a-f]{16}$" },
+    "buildHandle": { "type": "string", "pattern": "^build_[0-9a-f]{16}$" },
+    "callGraphId": { "type": "string", "pattern": "^cg_[0-9a-f]{16}$" },
+    "reportId": { "type": "string", "pattern": "^cov_[0-9a-f]{16}$" },
+    "traceId": { "type": "string", "pattern": "^tr_[0-9a-f]{16}$" },
+    "noteId": {
+      "type": "string",
+      "pattern": "^note_[0-9a-f]{16}$",
+      "description": "Deliberately NOT an evidenceId. findings.record requires ^ev_, so a note can never be cited as support for a claim. Notes influence what an agent DOES; evidence determines what an agent may SAY."
+    },
+    "noteKind": {
+      "enum": ["ENVIRONMENT", "CONVENTION", "DEAD_END", "FIXTURE"],
+      "description": "Closed set, and deliberately excludes anything claim-shaped. ENVIRONMENT: how this repo builds, what it needs. CONVENTION: how this project words commits, links issues, names tests. DEAD_END: an approach that failed and why, so budget is not spent twice. FIXTURE: setup a harness needs. There is no FACT or FINDING kind — assertions about bugs go through findings.record with evidence, never here."
+    },
+
+    "filePath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repository-relative POSIX path."
+    },
+
+    "oldLines": {
+      "type": "object",
+      "description": "Line range in PARENT-commit coordinates. The fault lives here.",
+      "properties": {
+        "side": { "const": "old" },
+        "start": { "type": "integer", "minimum": 1 },
+        "end": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["side", "start", "end"],
+      "additionalProperties": false
+    },
+    "newLines": {
+      "type": "object",
+      "description": "Line range in FIX-commit coordinates. The repair lives here.",
+      "properties": {
+        "side": { "const": "new" },
+        "start": { "type": "integer", "minimum": 1 },
+        "end": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["side", "start", "end"],
+      "additionalProperties": false
+    },
+
+    "methodRef": {
+      "type": "object",
+      "properties": {
+        "fqcn": { "type": "string" },
+        "name": { "type": "string" },
+        "descriptor": { "type": "string", "description": "JVM method descriptor, e.g. (Ljava/lang/String;)V" },
+        "sourceFile": { "$ref": "#/$defs/filePath" },
+        "declStart": { "type": "integer", "minimum": 1 },
+        "declEnd": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["fqcn", "name", "descriptor"],
+      "additionalProperties": false
+    },
+
+    "hunk": {
+      "type": "object",
+      "properties": {
+        "file": { "$ref": "#/$defs/filePath" },
+        "oldPath": { "$ref": "#/$defs/filePath", "description": "Present when the file was renamed." },
+        "status": { "enum": ["ADDED", "MODIFIED", "DELETED", "RENAMED"] },
+        "oldRange": { "$ref": "#/$defs/oldLines" },
+        "newRange": { "$ref": "#/$defs/newLines" },
+        "addedLines": { "type": "array", "items": { "type": "string" } },
+        "deletedLines": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["file", "status"],
+      "additionalProperties": false
+    },
+
+    "unknownReason": {
+      "enum": [
+        "BuildFailed",
+        "TestsFailed",
+        "Timeout",
+        "NoLinkedIssue",
+        "NoSymptom",
+        "NoDebugInfo",
+        "NoReproducer",
+        "RateLimited",
+        "NotApplicable",
+        "Truncated",
+        "ToolUnavailable"
+      ],
+      "description": "Closed set. A tool needing a reason not listed here must add the case to UnknownReason in modules/core first — never improvise a string. NOTE: every tool declares NotApplicable and ToolUnavailable. Both are universally true: any handler can be asked about a handle, commit or argument that does not resolve (NotApplicable), and any handler can find its backing service — Docker, Neo4j, GitHub — unreachable (ToolUnavailable). Both are determinable-but-absent answers, not failures, and both are citable."
+    },
+
+    "buildFailureClass": {
+      "enum": [
+        "DEPENDENCY_RESOLUTION",
+        "COMPILE_ERROR",
+        "JDK_MISMATCH",
+        "TIMEOUT",
+        "MISSING_TOOLCHAIN"
+      ]
+    },
+
+    "coverageStatus": { "enum": ["COVERED", "UNCOVERED", "NOT_EXECUTABLE"] },
+    "ecosystem": { "enum": ["JVM", "LLVM", "UNSUPPORTED"] },
+    "jvmBuildTool": { "enum": ["sbt", "maven", "gradle"] },
+    "reproducerTier": { "enum": ["T1_NATIVE", "T2_SYNTHESIZED", "T3_REACHED", "T4_STATIC"] },
+    "pathFidelity": { "enum": ["FULL", "PARTIAL", "UNIT"] },
+    "pathTier": { "enum": ["OBSERVED", "HYPOTHESIZED", "DISCONNECTED"] },
+    "symptomClass": {
+      "enum": [
+        "CRASH_UNCAUGHT_EXCEPTION",
+        "HANG_DEADLOCK",
+        "INCORRECT_OUTPUT",
+        "DATA_CORRUPTION_OR_LOSS",
+        "RESOURCE_LEAK",
+        "PERFORMANCE_DEGRADATION",
+        "CONCURRENCY_RACE",
+        "SECURITY_EXPOSURE",
+        "BUILD_OR_STARTUP_FAILURE",
+        "API_CONTRACT_VIOLATION",
+        "UNDETERMINED"
+      ]
+    },
+    "verdict": { "enum": ["BUG_FIX", "NOT_BUG_FIX", "UNDECIDED"] },
+    "candidateNet": { "enum": ["LEXICAL", "STRUCTURAL", "RANDOM_CONTROL"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

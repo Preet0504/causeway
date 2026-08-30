@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_trace_executed.json",
+  "name": "jvm_trace_executed",
+  "title": "jvm.trace_executed",
+  "description": "The set of methods actually executed by a reproducing run. Intersecting this with the static call graph turns a statically possible path into an observed one.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "reproducer-synthesist",
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NoReproducer",
+      "Truncated",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId"
+      },
+      "packageFilter": {
+        "type": "string",
+        "description": "Restrict to a package prefix."
+      }
+    },
+    "required": [
+      "traceId"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId"
+      },
+      "methods": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+        }
+      },
+      "totalCount": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "traceId",
+      "methods",
+      "totalCount",
+      "truncated"
+    ],
+    "additionalProperties": false
+  }
+}

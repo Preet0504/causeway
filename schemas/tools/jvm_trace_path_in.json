@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/jvm_trace_path_in.json",
+  "name": "jvm_trace_path_in",
+  "title": "jvm.trace_path_in",
+  "description": "Find a path between two methods CONFINED to what an execution actually ran. A hop that is statically plausible but absent from the trace does not belong in an observed path.",
+  "x-causeway": {
+    "class": "E",
+    "module": "jvm",
+    "permission": "allow",
+    "agents": [
+      "path-tracer"
+    ],
+    "unknownReasons": [
+      "NoReproducer",
+      "Timeout",
+      "NotApplicable",
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "traceId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/traceId"
+      },
+      "callGraphId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/callGraphId"
+      },
+      "from": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "to": {
+        "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+      },
+      "maxLen": {
+        "type": "integer",
+        "description": "Default 15."
+      }
+    },
+    "required": [
+      "traceId",
+      "callGraphId",
+      "from",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+        }
+      },
+      "allHopsExecuted": {
+        "type": "boolean"
+      },
+      "missingHops": {
+        "type": "array",
+        "items": {
+          "$ref": "causeway://schemas/_common.json#/$defs/methodRef"
+        }
+      }
+    },
+    "required": [
+      "path",
+      "allHopsExecuted"
+    ],
+    "additionalProperties": false
+  }
+}

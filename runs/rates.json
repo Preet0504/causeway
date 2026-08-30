@@ -1,0 +1,25 @@
+{
+  "_comment": "Per-million-token rates used by tools/collect-usage.mjs. Left null deliberately: prices change, and this file is used for real accounting, so it should carry numbers you copied from the current pricing page rather than numbers anyone guessed. Cost is reported as null until these are filled in — never as 0, which would read as 'free'.",
+  "_source": "https://claude.com/pricing",
+  "currency": "USD",
+  "models": {
+    "opus": {
+      "inputPerMTok": null,
+      "outputPerMTok": null,
+      "cacheWritePerMTok": null,
+      "cacheReadPerMTok": null
+    },
+    "sonnet": {
+      "inputPerMTok": null,
+      "outputPerMTok": null,
+      "cacheWritePerMTok": null,
+      "cacheReadPerMTok": null
+    },
+    "haiku": {
+      "inputPerMTok": null,
+      "outputPerMTok": null,
+      "cacheWritePerMTok": null,
+      "cacheReadPerMTok": null
+    }
+  }
+}
