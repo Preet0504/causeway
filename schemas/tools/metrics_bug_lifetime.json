@@ -17,6 +17,9 @@
   "inputSchema": {
     "type": "object",
     "properties": {
+      "repoHandle": {
+        "$ref": "causeway://schemas/_common.json#/$defs/repoHandle"
+      },
       "inducingSha": {
         "$ref": "causeway://schemas/_common.json#/$defs/commitId"
       },
@@ -28,6 +31,7 @@
       }
     },
     "required": [
+      "repoHandle",
       "fixSha"
     ],
     "additionalProperties": false

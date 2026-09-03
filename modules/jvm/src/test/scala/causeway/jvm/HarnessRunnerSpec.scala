@@ -24,6 +24,18 @@ class HarnessRunnerSpec extends AnyFunSuite with Matchers:
     files.foreach { case (n, c) => Files.writeString(d.resolve(n), c) }
     d
 
+  /** Like [[sourceDir]], but `path` may include directories (e.g. `"src/test/java/Foo.java"`),
+    * so a fixture can put a file under a `test`/`tests` directory the way a real checkout does.
+    */
+  private def sourceTree(files: (String, String)*): Path =
+    val d = Files.createTempDirectory("causeway-side")
+    files.foreach { case (rel, c) =>
+      val p = d.resolve(rel)
+      Files.createDirectories(p.getParent)
+      Files.writeString(p, c)
+    }
+    d
+
   private def work(): Path = Files.createTempDirectory("causeway-harness")
 
   // The worked example from the design, as compilable Java.
@@ -270,6 +282,77 @@ class HarnessRunnerSpec extends AnyFunSuite with Matchers:
   // JaCoCo places probes at branch points and method exits, so a method whose call THROWS may
   // record zero covered instructions even though it certainly ran. For an exception-manifesting
   // bug that undercounts exactly the chain leading to the fault. The stack trace fills it in.
+  // Found live: `stage` copies the whole checked-out revision, tests included, and the compile
+  // step used to `find .` for every `.java` file with no directory boundary — so a repo whose
+  // OWN test sources import a test-scope library (JUnit, here) failed to compile on THEIR
+  // missing import, not on anything the harness wrote. A reproducer-synthesist burned its entire
+  // iteration budget hitting the identical "package org.junit does not exist" wall on every
+  // attempt, on a repo whose production code compiled fine standalone.
+  test("a repo's own test sources, needing a library this container was never given, do not block the harness"):
+    requireDocker()
+    val uncompilableTest =
+      """import org.junit.Test;
+        |public class ConfigLoaderTest {
+        |    @Test public void whatever() { }
+        |}""".stripMargin
+
+    val harness =
+      """public class Harness {
+        |    public static Object run() throws Throwable {
+        |        ConfigLoader c = new ConfigLoader();
+        |        c.putDefault("key", "fallback");
+        |        return c.get("absent-section", "key");
+        |    }
+        |}""".stripMargin
+
+    val r = HarnessRunner.differential(
+      work(),
+      HarnessRunner.Side(sourceTree(
+        "src/main/java/ConfigLoader.java" -> buggyLoader,
+        "src/test/java/ConfigLoaderTest.java" -> uncompilableTest)),
+      HarnessRunner.Side(sourceTree(
+        "src/main/java/ConfigLoader.java" -> fixedLoader,
+        "src/test/java/ConfigLoaderTest.java" -> uncompilableTest)),
+      harness, Image
+    )
+
+    withClue(s"compileError=${r.compileError}: ") { r.compiled shouldBe true }
+    r.differs shouldBe true
+    r.triggersBug shouldBe true
+
+  // Found live, immediately after the fixture above started passing compilation for the first
+  // time: `javac` without `-d` leaves a class file NEXT TO its own source, not mirrored under
+  // the compile root — so a PACKAGED class compiled from `src/main/java/org/example/Foo.java`
+  // landed at `src/main/java/org/example/Foo.class`, and `java -cp . Runner` could never find
+  // it: the classloader looks for `./org/example/Foo.class`. Every other fixture in this file
+  // uses the default (unnamed) package, where source directory and compile root happen to
+  // coincide, which is exactly why this was invisible here while breaking every real repository
+  // — essentially all real Java is packaged. Both sides threw the identical NoClassDefFoundError,
+  // so this was not merely a crash: it silently read back as `differs=false`, "does not trigger".
+  test("a packaged class is found at runtime, not just compiled"):
+    requireDocker()
+    val fooV1 = "package org.example;\npublic class Foo { public static int f(int x){ return x / 2; } }"
+    val fooV2 = "package org.example;\npublic class Foo { public static int f(int x){ return (x + 1) / 2; } }"
+    val harness =
+      """public class Harness {
+        |    public static Object run() throws Throwable { return org.example.Foo.f(7); }
+        |}""".stripMargin
+
+    val r = HarnessRunner.differential(
+      work(),
+      HarnessRunner.Side(sourceTree("src/main/java/org/example/Foo.java" -> fooV1)),
+      HarnessRunner.Side(sourceTree("src/main/java/org/example/Foo.java" -> fooV2)),
+      harness, Image
+    )
+
+    withClue(s"parent=${r.atParent}; fix=${r.atFix}: ") {
+      r.atParent.get.exceptionType shouldBe None // NoClassDefFoundError here means this regressed
+      r.atFix.get.exceptionType shouldBe None
+    }
+    r.differs shouldBe true
+    r.atParent.get.returnValue shouldBe Some("3")
+    r.atFix.get.returnValue shouldBe Some("4")
+
   test("methods that threw rather than returned still appear in the trace"):
     requireDocker()
     val loader =

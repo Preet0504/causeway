@@ -44,6 +44,7 @@ const common = propertyNames(
 const benign = {
   graph_query: "rows are free-form objects by design; their field names come from the query",
   export_run: "these names go into the exported FILE, not the response envelope",
+  export_dataset: "these names go into run_metadata.json and CODEBOOK.md, not the response envelope",
 };
 
 function sources(dir, acc = []) {

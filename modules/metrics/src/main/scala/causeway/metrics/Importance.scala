@@ -19,7 +19,12 @@ final case class Dimensions(
 
 final case class Ranked(
     subject: String,
-    composite: Double,
+    // Option, not Double: a bug with NOTHING known has no composite to report, and reporting
+    // 0.0 for it is indistinguishable from a bug that scored a genuine 0.0 across three known
+    // dimensions. That collapse is exactly the getOrElse(0.0) anti-pattern rule 6 forbids —
+    // found live, by a rank_importance call whose caller had supplied no dimensions for two
+    // bugs and got back a 0.0 composite identical to a third bug's real, measured zero.
+    composite: Option[Double],
     dimensions: Map[String, Double],
     scoredOn: Vector[String],
     rank: Int
@@ -67,8 +72,9 @@ object Importance:
 
     Ranked(
       subject = d.subject,
-      // Mean over KNOWN dimensions. An unknown dimension abstains; it does not vote zero.
-      composite = if known.isEmpty then 0.0 else known.map(_._2).sum / known.size,
+      // Mean over KNOWN dimensions, or None when there are none. An unknown dimension abstains;
+      // it does not vote zero, and "nothing was known" does not become a fabricated 0.0 either.
+      composite = if known.isEmpty then None else Some(known.map(_._2).sum / known.size),
       dimensions = known.toMap,
       scoredOn = known.map(_._1),
       rank = 0
@@ -78,10 +84,13 @@ object Importance:
     *
     * Ties break on the number of dimensions scored, so a bug we know more about outranks one we
     * know less about at the same score — the honest ordering when the evidence differs.
+    *
+    * A bug with no composite at all sorts last, via NegativeInfinity — used ONLY to place it in
+    * the list, never returned to a caller as if it were a real score.
     */
   def rank(bugs: Vector[Dimensions]): Vector[Ranked] =
     bugs
       .map(score)
-      .sortBy(r => (-r.composite, -r.scoredOn.size, r.subject))
+      .sortBy(r => (-r.composite.getOrElse(Double.NegativeInfinity), -r.scoredOn.size, r.subject))
       .zipWithIndex
       .map { case (r, i) => r.copy(rank = i + 1) }

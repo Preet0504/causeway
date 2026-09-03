@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/export_dataset.json",
+  "name": "export_dataset",
+  "title": "export.dataset",
+  "description": "Assemble the researcher-facing deliverable: bugs.csv, path_hops.csv, findings.csv, evidence.csv, run_metadata.json, and a generated CODEBOOK.md, written under workspace/exports/<runId>/dataset/. Queries the graph directly rather than trusting a prior write, and joins per-bug findings through Bug.fixSha rather than filtering strictly by runId, because evidence and findings have been observed scattered across multiple server-process runIds for one mining effort. This is the file set a researcher downloads; graph_upsert_bug and export_run persist working state but were never meant to be read directly by someone outside the project.",
+  "x-causeway": {
+    "class": "P",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      }
+    },
+    "required": [
+      "runId"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "datasetDir": {
+        "type": "string",
+        "description": "Directory containing all six written files."
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "byteSize": { "type": "integer" }
+          },
+          "required": ["name", "byteSize"],
+          "additionalProperties": false
+        }
+      },
+      "bugCount": {
+        "type": "integer",
+        "description": "Bugs written to bugs.csv, admitted and rejected together."
+      },
+      "admittedCount": {
+        "type": "integer"
+      }
+    },
+    "required": ["datasetDir", "files", "bugCount", "admittedCount"],
+    "additionalProperties": false
+  }
+}

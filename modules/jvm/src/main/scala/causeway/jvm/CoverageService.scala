@@ -85,9 +85,16 @@ object CoverageService:
     *
     * `append=false` matters: a stale exec file from a previous revision would silently merge
     * with this one, and coverage attributed to the parent commit would leak into the fix.
+    *
+    * `excludes`, colon-separated JaCoCo patterns, is empty by default: `runLocally` attaches this
+    * straight to a generated harness's own `java` invocation, where nothing but the harness's and
+    * the repo's classes ever load, so there is nothing to exclude. `instrumentedCommand` below
+    * passes a real value, because it is the one caller where the agent ends up on a JVM that is
+    * NOT the test JVM.
     */
-  def agentArg(agentJar: String, execFile: String, append: Boolean = false): String =
-    s"-javaagent:$agentJar=destfile=$execFile,append=$append,dumponexit=true"
+  def agentArg(agentJar: String, execFile: String, append: Boolean = false, excludes: String = ""): String =
+    val ex = if excludes.isEmpty then "" else s",excludes=$excludes"
+    s"-javaagent:$agentJar=destfile=$execFile,append=$append,dumponexit=true$ex"
 
   /** Wrap a project's test command so the forked test JVM runs under the agent.
     *
@@ -101,15 +108,33 @@ object CoverageService:
     * caller runs with `append = true`: with `append = false` the last JVM to exit truncates the
     * file and throws away the test JVM's data.
     *
+    * Maven's own JVM does not just sit idle carrying the agent, either: for a project whose
+    * compiler plugin runs `javac` IN-PROCESS (the default — no `fork`), that JVM *is* the one
+    * that compiles the module, so the agent ends up instrumenting javac's own classes too. javac's
+    * attribution pass is deeply recursive (`Attr.attribTree` calling back into `visitApply` /
+    * `visitSelect` on every nested call expression), and JaCoCo's probe insertion adds a stack
+    * frame's worth of overhead to each of those methods — enough, on real source, to blow the
+    * default thread stack and abort the compile with `StackOverflowError`, reported by Maven only
+    * as "An unknown compilation problem occurred". Found live: `jvm_native_test_run` ported a
+    * fix's regression test onto the parent worktree and every attempt came back "ran no test at
+    * the parent", for every selector tried, on every bug in the run — traced to exactly this by
+    * reproducing the container command by hand and diffing instrumented against uninstrumented.
+    * `excludes` here keeps the agent off the compiler's and the build tool's own classes, which
+    * were never the thing being measured anyway — only the repository's tests and the production
+    * code they exercise are.
+    *
     * No `|| <command>` fallback. Re-running the suite without the agent cannot produce an exec
     * file — it doubles the wall clock and still yields nothing.
     */
+  val defaultAgentExcludes = "com.sun.tools.*:org.apache.maven.*:org.codehaus.*:jdk.*"
+
   def instrumentedCommand(
       testCommand: String,
       agentJar: String = "/work/.causeway/jacocoagent.jar",
-      execFile: String = "/work/.causeway/jacoco.exec"
+      execFile: String = "/work/.causeway/jacoco.exec",
+      excludes: String = defaultAgentExcludes
   ): String =
-    val arg = agentArg(agentJar, execFile, append = true)
+    val arg = agentArg(agentJar, execFile, append = true, excludes = excludes)
     s"""export JAVA_TOOL_OPTIONS="$arg"; $testCommand"""
 
   /** Parse a `.exec` against the class files that produced it.

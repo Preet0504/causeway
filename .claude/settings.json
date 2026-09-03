@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "mcp__causeway__evidence_attest",
+      "mcp__causeway__export_dataset",
       "mcp__causeway__export_run",
       "mcp__causeway__findings_record",
       "mcp__causeway__forge_bundle_candidates",
@@ -9,7 +10,10 @@
       "mcp__causeway__forge_issue",
       "mcp__causeway__forge_issue_comments",
       "mcp__causeway__forge_pr_for_commit",
+      "mcp__causeway__graph_bug_detail",
+      "mcp__causeway__graph_bug_list",
       "mcp__causeway__graph_checkpoint",
+      "mcp__causeway__graph_list_runs",
       "mcp__causeway__graph_query",
       "mcp__causeway__graph_resume_state",
       "mcp__causeway__graph_upsert_bug",

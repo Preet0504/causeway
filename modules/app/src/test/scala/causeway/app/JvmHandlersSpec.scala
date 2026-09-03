@@ -285,6 +285,91 @@ class JvmHandlersSpec extends AnyFunSuite with Matchers:
     Handles(ws).buildDir("build_ffffffffffffffff") shouldBe None
     Handles(ws).coverageReport("cov_ffffffffffffffff") shouldBe None
 
+  /** Repo handles rehydrating too, which is the fix for a defect `build`/`coverage`
+    * rehydration above did NOT cover: `register` never journalled at all, so a server restart
+    * dropped every repoHandle's clone binding even though the clone sat untouched on disk. Found
+    * by actually running a mining session and watching a symptom-characterizer dispatch fail
+    * every single tool call with Unknown(NotApplicable) right after an unrelated mid-run
+    * restart — the clone was there, nothing pointed at it any more.
+    */
+  test("a repo handle survives the process that issued it"):
+    val ws  = Files.createTempDirectory("causeway-repo-rehydrate")
+    val dir = Files.createDirectories(ws.resolve("clones").resolve("repo_abc123"))
+    org.eclipse.jgit.api.Git.init().setDirectory(dir.toFile).call().close()
+
+    val handles = Handles(ws)
+    val handle  = handles.repoHandle("https://example.invalid/owner/repo.git")
+    val svc     = causeway.vcs.GitService.open(dir).toOption.get
+    handles.register(handle, svc, dir, "https://example.invalid/owner/repo.git")
+
+    // A NEW Handles, as a restarted server would have: empty maps, same workspace.
+    val restarted = Handles(ws)
+    restarted.dir(handle) shouldBe Some(dir)
+    restarted.git(handle) shouldBe defined
+    restarted.remoteUrl(handle) shouldBe Some("https://example.invalid/owner/repo.git")
+
+  test("a repo handle whose directory is no longer a git repository stays a miss"):
+    val ws  = Files.createTempDirectory("causeway-repo-rehydrate-gone")
+    val dir = Files.createDirectories(ws.resolve("clones").resolve("repo_def456"))
+    org.eclipse.jgit.api.Git.init().setDirectory(dir.toFile).call().close()
+
+    val handles = Handles(ws)
+    val handle  = handles.repoHandle("https://example.invalid/owner/repo2.git")
+    val svc     = causeway.vcs.GitService.open(dir).toOption.get
+    handles.register(handle, svc, dir, "https://example.invalid/owner/repo2.git")
+
+    // The .git directory is gone; the parent directory alone must not be mistaken for a clone.
+    def deleteRecursively(p: java.nio.file.Path): Unit =
+      if Files.isDirectory(p) then
+        Files.list(p).forEach(deleteRecursively)
+      Files.delete(p)
+    deleteRecursively(dir.resolve(".git"))
+
+    Handles(ws).dir(handle) shouldBe None
+    Handles(ws).git(handle) shouldBe None
+
+  test("an unjournalled repo handle is not invented"):
+    Handles(Files.createTempDirectory("causeway-repo-rehydrate-none")).dir("repo_ffffffffffffffff") shouldBe None
+
+  // Found live: unlike a build or a coverage report, a trace has no artifact on disk it can be
+  // RE-DERIVED from — the container that produced it is --rm, gone the moment the differential
+  // ends — so before this fix a server restart lost every trace issued so far, for good. Three
+  // separate path-tracer dispatches in one live run each lost real analysis work rediscovering
+  // that the trace their tasking cited no longer existed.
+  test("a trace survives the process that issued it"):
+    val ws      = Files.createTempDirectory("causeway-trace-rehydrate")
+    val handles = Handles(ws)
+    val methods = Vector(
+      causeway.core.MethodRef("org.json.XML", "mustEscape", "(I)Z"),
+      // An empty descriptor is a real shape here (D27: stack frames carry none) — must round-trip.
+      causeway.core.MethodRef("org.json.XMLTokener", "unescapeEntity", "")
+    )
+    val id = handles.registerTrace(methods)
+
+    // A NEW Handles, as a restarted server would have: empty maps, same workspace.
+    Handles(ws).trace(id) shouldBe Some(methods)
+
+  test("a trace's journal row is verified against its own content, not trusted blindly"):
+    val ws = Files.createTempDirectory("causeway-trace-rehydrate-corrupt")
+    Handles(ws) // ensures the workspace directory exists before hand-writing into it
+
+    // A row whose claimed id does not match what its own content digests to — the same shape a
+    // corrupted or overwritten row would take. Built with the journal's own JSON writer rather
+    // than string-editing an already-escaped line, since the field separator is a raw control
+    // character the JSON encoder escapes on the way out.
+    val journalPath = ws.resolve("handles.jsonl")
+    val bogusId = "tr_ffffffffffffffff"
+    val n = causeway.mcp.Json.obj()
+    n.put("kind", "trace"); n.put("handle", bogusId)
+    n.put("methods", "A" + 1.toChar + "b" + 1.toChar + "()V")
+    Files.writeString(journalPath, causeway.mcp.Json.write(n) + "\n",
+      java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
+
+    Handles(ws).trace(bogusId) shouldBe None
+
+  test("an unjournalled trace is not invented"):
+    Handles(Files.createTempDirectory("causeway-trace-rehydrate-none")).trace("tr_ffffffffffffffff") shouldBe None
+
   /** Compile and run a tiny program under the real JaCoCo agent.
     *
     * A genuine exec file, not a fixture byte array: the point of rehydration is that JaCoCo can

@@ -21,10 +21,37 @@ object Neo4jConfig:
 
 final case class CheckpointRow(stage: String, done: Int, pending: Int)
 
+final case class RunSummaryRow(runId: String, repo: String, lastSeen: String)
+
+/** One changed span, `file:start-end` in a stated coordinate system.
+  *
+  * Not `OldLines`/`NewLines` themselves — those live in `modules/core` and this module has no
+  * dependency on the JVM ecosystem types that would otherwise be needed to round-trip them
+  * through a Neo4j property (which can only hold primitives and lists of primitives, never a
+  * nested object). `side` records which coordinate system the caller already resolved this in;
+  * this type does not re-derive or check that, it only carries what it was given.
+  */
+final case class RangeRow(file: String, start: Int, end: Int):
+  override def toString = s"$file:$start-$end"
+
+object RangeRow:
+  private val Pattern = """^(.*):(\d+)-(\d+)$""".r
+  def parse(s: String): Option[RangeRow] = s match
+    case Pattern(f, a, b) => scala.util.Try(RangeRow(f, a.toInt, b.toInt)).toOption
+    case _                => None
+
 /** A bug as persisted, including the ones that failed admission.
   *
   * `admitted = false` rows are the point, not noise: exporting only the admitted bugs would
   * hide the dataset's selection bias behind a clean-looking file (D2).
+  *
+  * `parentSha`, `oldRanges` and `newRanges` are S5's output, persisted directly onto the Bug
+  * node rather than left to evaporate at the end of one command invocation. There is no
+  * `ClaimType` for fault location — it is deterministic output, not a claim requiring an
+  * agent's evidence citation — so a Bug-node property is where it belongs, the same way
+  * `admitted` and `reproducerTier` already are. Before this, S5 computed these coordinates and
+  * every later stage consumed them, but nothing wrote them down: a bug that made it all the way
+  * to a traced path still could not tell a user which lines to change to reproduce it.
   */
 final case class BugRow(
     repo: String,
@@ -34,7 +61,10 @@ final case class BugRow(
     importance: Option[Double],
     scoredOn: Vector[String],
     reproducerTier: Option[String],
-    pathFidelity: Option[String]
+    pathFidelity: Option[String],
+    parentSha: Option[String] = None,
+    oldRanges: Vector[RangeRow] = Vector.empty,
+    newRanges: Vector[RangeRow] = Vector.empty
 )
 
 final case class FindingRow(
@@ -46,6 +76,32 @@ final case class FindingRow(
     claim: String,
     gaps: Vector[String],
     evidenceCount: Int
+)
+
+/** A finding joined to the ids of the evidence it cites, without the count-only collapse
+  * [[FindingRow]] does. Needed wherever a caller has to walk `SUPPORTED_BY` edges rather than
+  * just report how many there are — building `path_hops.csv` or a findings/evidence bridge table.
+  */
+final case class FindingWithEvidence(
+    findingId: String,
+    subject: String,
+    runId: String,
+    agent: String,
+    claimType: String,
+    confidence: Double,
+    claimJson: String,
+    gaps: Vector[String],
+    evidenceIds: Vector[String]
+)
+
+final case class EvidenceRow(
+    id: String,
+    tool: String,
+    argsHash: String,
+    payloadHash: String,
+    at: String,
+    runId: String,
+    provenance: String
 )
 
 /** Persistence for evidence, findings, bugs, and run checkpoints.
@@ -166,16 +222,26 @@ final class Neo4jStore(driver: Driver):
 
   /** Upsert a bug. Bugs failing admission are stored with `admitted = false` and a reason —
     * never deleted (D2), or the dataset's selection bias becomes invisible.
+    *
+    * Every parameter after `fixSha` is optional and independently settable — a phase command
+    * calls this with only the fields IT determined, `null`/empty for the rest, and Cypher's
+    * `coalesce` (below) keeps whatever an earlier phase already wrote rather than clobbering it
+    * with absence. Phase commands each persist incrementally as they finish, not just once at
+    * the end, which is what lets a fresh command invocation reconstruct state from the graph
+    * instead of needing the same conversation to still be open.
     */
   def putBug(
       repo: String,
       fixSha: String,
-      admitted: Boolean,
-      rejectedFor: Option[String],
-      importance: Option[Double],
-      scoredOn: Vector[String],
-      reproducerTier: Option[String],
-      pathFidelity: Option[String]
+      admitted: Option[Boolean] = None,
+      rejectedFor: Option[String] = None,
+      importance: Option[Double] = None,
+      scoredOn: Vector[String] = Vector.empty,
+      reproducerTier: Option[String] = None,
+      pathFidelity: Option[String] = None,
+      parentSha: Option[String] = None,
+      oldRanges: Vector[RangeRow] = Vector.empty,
+      newRanges: Vector[RangeRow] = Vector.empty
   ): Unit = session { s =>
     s.executeWrite { tx =>
       tx.run(
@@ -183,19 +249,28 @@ final class Neo4jStore(driver: Driver):
           |MERGE (c:Commit {repo: $repo, sha: $fixSha})
           |MERGE (r)-[:HAS_COMMIT]->(c)
           |MERGE (b:Bug {repo: $repo, fixSha: $fixSha})
-          |SET b.admitted = $admitted, b.rejectedFor = $rejectedFor,
-          |    b.importance = $importance, b.scoredOn = $scoredOn,
-          |    b.reproducerTier = $tier, b.pathFidelity = $fidelity
+          |SET b.admitted     = coalesce($admitted, b.admitted, false),
+          |    b.rejectedFor  = coalesce($rejectedFor, b.rejectedFor),
+          |    b.importance   = coalesce($importance, b.importance),
+          |    b.scoredOn     = CASE WHEN size($scoredOn) > 0 THEN $scoredOn ELSE coalesce(b.scoredOn, []) END,
+          |    b.reproducerTier = coalesce($tier, b.reproducerTier),
+          |    b.pathFidelity   = coalesce($fidelity, b.pathFidelity),
+          |    b.parentSha      = coalesce($parentSha, b.parentSha),
+          |    b.oldRanges      = CASE WHEN size($oldRanges) > 0 THEN $oldRanges ELSE coalesce(b.oldRanges, []) END,
+          |    b.newRanges      = CASE WHEN size($newRanges) > 0 THEN $newRanges ELSE coalesce(b.newRanges, []) END
           |MERGE (b)-[:FIXED_BY]->(c)""".stripMargin,
         Map[String, Object](
           "repo" -> repo,
           "fixSha" -> fixSha,
-          "admitted" -> Boolean.box(admitted),
+          "admitted" -> admitted.map(Boolean.box).orNull,
           "rejectedFor" -> rejectedFor.orNull,
           "importance" -> importance.map(Double.box).orNull,
           "scoredOn" -> scoredOn.asJava,
           "tier" -> reproducerTier.orNull,
-          "fidelity" -> pathFidelity.orNull
+          "fidelity" -> pathFidelity.orNull,
+          "parentSha" -> parentSha.orNull,
+          "oldRanges" -> oldRanges.map(_.toString).asJava,
+          "newRanges" -> newRanges.map(_.toString).asJava
         ).asJava
       ).consume()
     }
@@ -215,11 +290,14 @@ final class Neo4jStore(driver: Driver):
         """MATCH (b:Bug {repo: $repo})
           |RETURN b.fixSha AS fixSha, b.admitted AS admitted, b.rejectedFor AS rejectedFor,
           |       b.importance AS importance, b.scoredOn AS scoredOn,
-          |       b.reproducerTier AS tier, b.pathFidelity AS fidelity
+          |       b.reproducerTier AS tier, b.pathFidelity AS fidelity,
+          |       b.parentSha AS parentSha, b.oldRanges AS oldRanges, b.newRanges AS newRanges
           |ORDER BY b.importance DESC, b.fixSha""".stripMargin,
         Map[String, Object]("repo" -> repo).asJava
       ).list().asScala.toVector.map { r =>
         def opt(k: String) = Option(r.get(k)).filterNot(_.isNull).map(_.asString())
+        def ranges(k: String) = Option(r.get(k)).filterNot(_.isNull)
+          .map(_.asList(_.asString()).asScala.toVector.flatMap(RangeRow.parse)).getOrElse(Vector.empty)
         BugRow(
           repo = repo,
           fixSha = r.get("fixSha").asString(),
@@ -229,11 +307,110 @@ final class Neo4jStore(driver: Driver):
           scoredOn = Option(r.get("scoredOn")).filterNot(_.isNull)
             .map(_.asList(_.asString()).asScala.toVector).getOrElse(Vector.empty),
           reproducerTier = opt("tier"),
-          pathFidelity = opt("fidelity")
+          pathFidelity = opt("fidelity"),
+          parentSha = opt("parentSha"),
+          oldRanges = ranges("oldRanges"),
+          newRanges = ranges("newRanges")
         )
       }
     }
   }
+
+  /** Every per-bug finding for a repository, joined through `Bug.fixSha = Finding.subject`
+    * rather than filtered by a single runId.
+    *
+    * `findingsForRun` filters strictly on `f.runId = $id`, which is wrong for a dataset export:
+    * evidence and findings have been observed scattered across up to six different runIds for
+    * one mining effort, because a server mints its own process id at startup and adoption of the
+    * caller-supplied mining runId only happens on the first call that carries one. A strict
+    * runId filter would silently omit real findings from "the complete dataset". Joining on the
+    * commit sha instead is immune to that: the sha does not change no matter which process wrote
+    * the finding.
+    *
+    * Restricted to the four PER-BUG claim types. `BuildRecipe` and `Strategy` describe the run,
+    * not any one commit, and have no fixSha to join through — see [[runLevelFindings]].
+    */
+  def bugFindings(repo: String): Vector[FindingWithEvidence] = session { s =>
+    s.executeRead { tx =>
+      tx.run(
+        """MATCH (b:Bug {repo: $repo})
+          |MATCH (f:Finding) WHERE f.subject = b.fixSha
+          |  AND f.claimType IN ['Verdict', 'Symptom', 'Path', 'Reproducer']
+          |OPTIONAL MATCH (f)-[:SUPPORTED_BY]->(e:Evidence)
+          |RETURN f.id AS findingId, b.fixSha AS subject, f.runId AS runId, f.agent AS agent,
+          |       f.claimType AS claimType, f.confidence AS confidence, f.claim AS claim,
+          |       f.gaps AS gaps, collect(e.id) AS evidenceIds
+          |ORDER BY b.fixSha, f.claimType, f.id""".stripMargin,
+        Map[String, Object]("repo" -> repo).asJava
+      ).list().asScala.toVector.map(rowToFindingWithEvidence)
+    }
+  }
+
+  /** `BuildRecipe` and `Strategy` findings: one per mining run, not per bug.
+    *
+    * Scoped to every `Run` node ever associated with this repository, not just one runId, for
+    * the same reason as [[bugFindings]] — the run that actually recorded the recipe may not be
+    * the one whose id the caller happens to be exporting under.
+    */
+  def runLevelFindings(repo: String): Vector[FindingWithEvidence] = session { s =>
+    s.executeRead { tx =>
+      tx.run(
+        """MATCH (r:Run {repo: $repo})
+          |MATCH (f:Finding {runId: r.id}) WHERE f.claimType IN ['BuildRecipe', 'Strategy']
+          |OPTIONAL MATCH (f)-[:SUPPORTED_BY]->(e:Evidence)
+          |RETURN f.id AS findingId, f.subject AS subject, f.runId AS runId, f.agent AS agent,
+          |       f.claimType AS claimType, f.confidence AS confidence, f.claim AS claim,
+          |       f.gaps AS gaps, collect(e.id) AS evidenceIds
+          |ORDER BY f.claimType, f.id""".stripMargin,
+        Map[String, Object]("repo" -> repo).asJava
+      ).list().asScala.toVector.map(rowToFindingWithEvidence)
+    }
+  }
+
+  private def rowToFindingWithEvidence(r: org.neo4j.driver.Record): FindingWithEvidence =
+    FindingWithEvidence(
+      findingId = r.get("findingId").asString(),
+      subject = Option(r.get("subject")).filterNot(_.isNull).map(_.asString()).getOrElse(""),
+      runId = r.get("runId").asString(""),
+      agent = r.get("agent").asString(""),
+      claimType = r.get("claimType").asString(""),
+      confidence = Option(r.get("confidence")).filterNot(_.isNull).map(_.asDouble()).getOrElse(0.0),
+      claimJson = r.get("claim").asString("{}"),
+      gaps = Option(r.get("gaps")).filterNot(_.isNull)
+        .map(_.asList(_.asString()).asScala.toVector).getOrElse(Vector.empty),
+      evidenceIds = r.get("evidenceIds").asList(_.asString()).asScala.toVector.filter(_ != null)
+    )
+
+  /** Evidence rows by id, in one round trip.
+    *
+    * Deliberately not scoped by repo or runId — [[Evidence]] carries neither, only the runId of
+    * whichever process happened to issue it, which is exactly the field this whole export exists
+    * to stop trusting. The caller supplies the exact ids it already collected from
+    * `SUPPORTED_BY` edges, and gets back only those.
+    */
+  def evidenceByIds(ids: Vector[String]): Vector[EvidenceRow] =
+    if ids.isEmpty then Vector.empty
+    else session { s =>
+      s.executeRead { tx =>
+        tx.run(
+          """MATCH (e:Evidence) WHERE e.id IN $ids
+            |RETURN e.id AS id, e.tool AS tool, e.argsHash AS argsHash, e.payloadHash AS payloadHash,
+            |       e.at AS at, e.runId AS runId, e.provenance AS provenance
+            |ORDER BY e.id""".stripMargin,
+          Map[String, Object]("ids" -> ids.asJava).asJava
+        ).list().asScala.toVector.map { r =>
+          EvidenceRow(
+            id = r.get("id").asString(),
+            tool = r.get("tool").asString(""),
+            argsHash = r.get("argsHash").asString(""),
+            payloadHash = r.get("payloadHash").asString(""),
+            at = r.get("at").asString(""),
+            runId = r.get("runId").asString(""),
+            provenance = r.get("provenance").asString("")
+          )
+        }
+      }
+    }
 
   /** Move every Evidence row from one run id to another, returning how many moved. */
   def reattributeEvidence(from: RunId, to: RunId): Int = session { s =>
@@ -318,6 +495,22 @@ final class Neo4jStore(driver: Driver):
         "MATCH (r:Run {repo: $repo}) RETURN r.id AS id ORDER BY r.lastSeen DESC LIMIT 1",
         Map[String, Object]("repo" -> repo).asJava
       ).list().asScala.headOption.flatMap(r => RunId(r.get("id").asString()).toOption)
+    }
+  }
+
+  /** Every run this server has ever seen, most recent first — the backing query for
+    * `/list-runs`. A user with no prior context has no repo, no runId, and no starting point
+    * except "what have I mined so far", and nothing before this could answer that without
+    * already knowing what to ask for.
+    */
+  def allRuns(): Vector[RunSummaryRow] = session { s =>
+    s.executeRead { tx =>
+      tx.run(
+        "MATCH (r:Run) RETURN r.id AS id, r.repo AS repo, r.lastSeen AS lastSeen ORDER BY r.lastSeen DESC",
+        java.util.Collections.emptyMap[String, Object]()
+      ).list().asScala.toVector.map { r =>
+        RunSummaryRow(r.get("id").asString(), r.get("repo").asString(""), r.get("lastSeen").asString(""))
+      }
     }
   }
 

@@ -81,7 +81,24 @@ object CallGraphService:
         if signatures.isEmpty then algo.initialize()
         else algo.initialize(signatures.asJava)
 
-      val id = f"cg_${(classpath.mkString + algorithm).hashCode.toLong & 0xffffffffL}%016x"
+      // SHA-256, not String#hashCode: entryPoints must participate in the id, and a 32-bit Java
+      // hashCode does not have the room. Found live: two builds against the SAME classpath with
+      // DIFFERENT entry points — the second call adding one this repo's own test happened to
+      // need — produced the IDENTICAL callGraphId, because entryPoints were never hashed at all.
+      // `registerCallGraph` keys a mutable map on `h.id` and simply overwrites whatever was
+      // there, so the second build silently replaced the first graph under the SAME id. That is
+      // exactly the kind of thing rule 1 forbids being invisible: a path-tracer's citation of
+      // "callGraphId cg_X" is supposed to be a stable reference to one built artifact, and here
+      // it was actually a (classpath, algorithm) cache slot that a later, unrelated build could
+      // silently repoint. The two graphs in this incident happened to agree on the fault-site
+      // edge the caller needed, so nothing wrong was ASSERTED — but there was no guarantee of
+      // that, and a citation recorded against the first build could have gone stale the moment
+      // the second one landed, with no way to detect it from the id string alone.
+      val idInput = (classpath.sorted.mkString("|") + "|" + algorithm + "|" +
+        entryPoints.map(_.signature).sorted.mkString(",")).getBytes("UTF-8")
+      val idHash = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(idInput).map(b => f"${b & 0xff}%02x").mkString
+      val id = s"cg_${idHash.take(16)}"
       CallGraphHandle(id, algorithm, view, graph, entryPoints)
     }.toEither.left.map(t => s"cannot build call graph: ${Option(t.getMessage).getOrElse(t.toString)}")
 
@@ -114,12 +131,28 @@ object CallGraphService:
     if candidates.isEmpty then None
     else if candidates.size == 1 then Some(candidates.head)
     else
+      def paramTypesOf(sig: MethodSignature): Vector[String] =
+        sig.getParameterTypes.asScala.map(_.toString).toVector
+
       // With several overloads, guessing is worse than failing: the wrong `get` produces a
-      // plausible path to the wrong code. Fall back to the first candidate ONLY when the
-      // descriptor gives us nothing to discriminate on.
-      descriptorParamCount(ref.descriptor) match
-        case Some(n) => candidates.find(_.getParameterCount == n)
-        case None    => Some(candidates.head)
+      // plausible path to the wrong code. Parameter COUNT is not always enough to discriminate —
+      // `toJSONObject(String)` and `toJSONObject(Reader)` both take exactly one argument, and
+      // "the first candidate with that many parameters" silently returns whichever one this
+      // view happens to enumerate first, which is not necessarily the one the descriptor named.
+      // Found live: a path-tracer supplied `toJSONObject(String)` and got back a path headed by
+      // `toJSONObject(Reader)` — a different overload, entered silently — and only caught it by
+      // independently re-deriving the same query and noticing the returned method never
+      // appeared in its own trace's executed set. Match on the actual parameter TYPES first;
+      // fall back to count only when the descriptor cannot be decoded into types at all, or
+      // when decoded types match no candidate exactly (a real but rarer gap than count alone).
+      descriptorParamTypes(ref.descriptor) match
+        case Some(types) =>
+          candidates.find(c => paramTypesOf(c) == types)
+            .orElse(descriptorParamCount(ref.descriptor).flatMap(n => candidates.find(_.getParameterCount == n)))
+        case None =>
+          descriptorParamCount(ref.descriptor) match
+            case Some(n) => candidates.find(_.getParameterCount == n)
+            case None    => Some(candidates.head)
 
   /** Count parameters in a method descriptor.
     *
@@ -153,6 +186,56 @@ object CallGraphService:
               i += 1
               n += 1
         Some(n)
+
+  /** Decode a descriptor into per-parameter type strings, in SootUp's own `Type#toString` style
+    * (`"java.lang.String"`, `"int"`, `"java.lang.String[]"`) — the same style `toRef` already
+    * uses to build a descriptor FROM a resolved signature, so the two are directly comparable.
+    *
+    * Same two dialects as [[descriptorParamCount]], same reason: `toRef` emits SootUp's readable
+    * form, everything else uses a raw JVM descriptor. Where `descriptorParamCount` only needs
+    * the number of parameters, `resolve` needs their actual TYPES to disambiguate overloads that
+    * share an arity — `toJSONObject(String)` and `toJSONObject(Reader)` both take exactly one
+    * argument, so count alone cannot tell them apart; only decoding `Ljava/lang/String;` all the
+    * way to `"java.lang.String"` can.
+    */
+  private[jvm] def descriptorParamTypes(descriptor: String): Option[Vector[String]] =
+    val open  = descriptor.indexOf('(')
+    val close = descriptor.indexOf(')')
+    if open < 0 || close < open then None
+    else
+      val params = descriptor.substring(open + 1, close)
+      if params.isEmpty then Some(Vector.empty)
+      else if params.contains(',') || params.contains('.') then
+        // Already SootUp's own readable dialect.
+        Some(params.split(",").toVector.map(_.trim).filter(_.nonEmpty))
+      else
+        def primitiveName(c: Char): Option[String] = c match
+          case 'B' => Some("byte");    case 'C' => Some("char")
+          case 'D' => Some("double");  case 'F' => Some("float")
+          case 'I' => Some("int");     case 'J' => Some("long")
+          case 'S' => Some("short");   case 'Z' => Some("boolean")
+          case _   => None
+
+        val out = Vector.newBuilder[String]
+        var i   = 0
+        var ok  = true
+        while ok && i < params.length do
+          var dims = 0
+          while i < params.length && params.charAt(i) == '[' do
+            dims += 1; i += 1
+          if i >= params.length then ok = false
+          else params.charAt(i) match
+            case 'L' =>
+              val end = params.indexOf(';', i)
+              if end < 0 then ok = false
+              else
+                out += params.substring(i + 1, end).replace('/', '.') + ("[]" * dims)
+                i = end + 1
+            case c =>
+              primitiveName(c) match
+                case Some(n) => out += n + ("[]" * dims); i += 1
+                case None    => ok = false; i += 1
+        if ok then Some(out.result()) else None
 
   private[jvm] def toRef(sig: MethodSignature): MethodRef =
     MethodRef(

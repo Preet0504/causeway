@@ -165,11 +165,32 @@ object HarnessRunner:
         "-javaagent:/work/jacocoagent.jar=destfile=jacoco.exec,append=false,dumponexit=true"
       else ""
 
+    // `find . -name '*.java'` used to sweep in the checked-out repo's OWN test sources alongside
+    // Harness.java and Runner.java — `stage` copies the whole revision tree, tests included, so
+    // there was never a directory boundary keeping them out. A repo's tests almost always need
+    // JUnit or some other test-scope dependency this container was never given (no network here,
+    // deliberately — see the class doc), so the compile failed on THEIR missing imports, not on
+    // anything the harness wrote, and every input looked equally "uncompilable" no matter what
+    // the agent tried. Found live: a reproducer-synthesist burned its whole iteration budget
+    // hitting the identical `package org.junit does not exist` wall on every attempt.
+    // Pruning any `test`/`tests` directory (Maven and Gradle both put tests at `src/test/java`)
+    // leaves production sources plus the two generated files — the only inputs this tool ever
+    // promised to compile.
+    // `-d .`: without it, javac's default is to leave every class file NEXT TO its source file,
+    // not mirrored under the compile root — so a packaged class (`org.example.Foo`, compiled
+    // from `src/main/java/org/example/Foo.java`) lands at `src/main/java/org/example/Foo.class`,
+    // and `java -cp . Runner` below can never find it: the classloader looks for `./org/example/
+    // Foo.class` and there is nothing there. Every fixture in this file's own test suite uses the
+    // default (unnamed) package, which happens to make source dir and compile root the same
+    // directory — so this was invisible here even though it broke every REAL repository, which
+    // is packaged as a matter of course. `Harness.java`/`Runner.java` are written at the compile
+    // root already, so they land in the same place with or without this flag; only packaged
+    // production code was ever affected.
     val script =
       s"""set -e
          |compile_and_run() {
          |  cd /work/$$1
-         |  if ! javac -g $$(find . -name '*.java') > compile.log 2>&1; then
+         |  if ! javac -d . -g $$(find . \\( -name test -o -name tests \\) -type d -prune -o -name '*.java' -print) > compile.log 2>&1; then
          |    echo "COMPILE_FAILED:$$1"
          |    cat compile.log
          |    return 0
@@ -215,7 +236,8 @@ object HarnessRunner:
           ).flatten
         case _ => Vector.empty
 
-      // javac compiles in place here, so the class files sit alongside the sources.
+      // `-d .` (see above) puts every class file under the compile root, package-mirrored, so
+      // `workdir/parent` is the one directory CoverageService needs to walk.
       val fromCoverage =
         if agent.isEmpty then Vector.empty
         else

@@ -99,9 +99,9 @@ class Neo4jStoreSpec extends AnyFunSuite with Matchers with BeforeAndAfterAll:
     val s = store(); val run = freshRun()
     s.purgeRepo("test/repo")
 
-    s.putBug("test/repo", "a" * 40, admitted = true, None, Some(0.75),
+    s.putBug("test/repo", "a" * 40, admitted = Some(true), None, Some(0.75),
       Vector("faultLineCoverage", "blastRadius"), Some("T1_NATIVE"), Some("FULL"))
-    s.putBug("test/repo", "b" * 40, admitted = false, Some("BUILD_FAILED:JDK_MISMATCH"),
+    s.putBug("test/repo", "b" * 40, admitted = Some(false), Some("BUILD_FAILED:JDK_MISMATCH"),
       None, Vector.empty, None, None)
 
     s.bugCount("test/repo") shouldBe 2
@@ -111,8 +111,8 @@ class Neo4jStoreSpec extends AnyFunSuite with Matchers with BeforeAndAfterAll:
   test("re-upserting a bug updates it in place"):
     val s = store()
     s.purgeRepo("test/repo")
-    s.putBug("test/repo", "c" * 40, admitted = false, Some("BUILD_FAILED"), None, Vector.empty, None, None)
-    s.putBug("test/repo", "c" * 40, admitted = true, None, Some(0.9), Vector("blastRadius"),
+    s.putBug("test/repo", "c" * 40, admitted = Some(false), Some("BUILD_FAILED"), None, Vector.empty, None, None)
+    s.putBug("test/repo", "c" * 40, admitted = Some(true), None, Some(0.9), Vector("blastRadius"),
       Some("T2_SYNTHESIZED"), Some("PARTIAL"))
 
     s.bugCount("test/repo") shouldBe 1
@@ -163,9 +163,9 @@ class Neo4jStoreSpec extends AnyFunSuite with Matchers with BeforeAndAfterAll:
     val run = freshRun()
     s.putRun(run, "test/repo")
 
-    s.putBug("test/repo", "a" * 40, admitted = true, None, Some(0.8),
+    s.putBug("test/repo", "a" * 40, admitted = Some(true), None, Some(0.8),
       Vector("blastRadius", "coverage"), Some("T2"), Some("FULL"))
-    s.putBug("test/repo", "b" * 40, admitted = false, Some("NO_LINKED_ISSUE"), None,
+    s.putBug("test/repo", "b" * 40, admitted = Some(false), Some("NO_LINKED_ISSUE"), None,
       Vector.empty, None, None)
 
     val bugs = s.bugsForRepo("test/repo")

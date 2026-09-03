@@ -23,7 +23,7 @@ class ImportanceSpec extends AnyFunSuite with Matchers:
     r.scoredOn should contain theSameElementsAs Vector(
       "faultLineCoverage", "blastRadius", "symptomDistance"
     )
-    r.composite shouldBe 0.5 +- 0.001 // 0.5, 25/50, 5/10 -> mean 0.5
+    r.composite.get shouldBe 0.5 +- 0.001 // 0.5, 25/50, 5/10 -> mean 0.5
 
   // This is D19. The obvious weighted-sum implementation fails this test, and failing it would
   // make a missing signal act as evidence against a bug.
@@ -36,17 +36,23 @@ class ImportanceSpec extends AnyFunSuite with Matchers:
 
     // Its composite is the mean of what IS known (0.5 and 0.5), so it is unchanged — not dragged
     // down by a zero standing in for the missing dimension.
-    withoutSymptom.composite shouldBe withSymptom.composite +- 0.001
+    withoutSymptom.composite.get shouldBe withSymptom.composite.get +- 0.001
 
   test("a zero-vote implementation would have scored it strictly lower — guarding against that"):
     val known3    = Importance.score(dims("a", dist = known(5)))
     val unknown1  = Importance.score(dims("b", dist = missing(UnknownReason.NoSymptom)))
     val zeroVoted = (0.5 + 0.5 + 0.0) / 3.0
 
-    unknown1.composite should be > zeroVoted
-    unknown1.composite shouldBe known3.composite +- 0.001
+    unknown1.composite.get should be > zeroVoted
+    unknown1.composite.get shouldBe known3.composite.get +- 0.001
 
-  test("a bug with nothing known scores zero but records that it was scored on nothing"):
+  test("a bug with nothing known has NO composite — not a fabricated 0.0"):
+    // Composite is Option[Double] precisely so this case and a genuine zero cannot collapse
+    // into the same value. Earlier this returned a numeric 0.0 here, identical to a bug that
+    // scored a real zero across three known dimensions — the same getOrElse(0.0) anti-pattern
+    // rule 6 forbids elsewhere, caught by actually running rank_importance with a bug that had
+    // no dimensions supplied at all and getting back a composite indistinguishable from a real
+    // measured zero.
     val r = Importance.score(
       dims("empty",
         cov = missing(UnknownReason.BuildFailed),
@@ -54,11 +60,23 @@ class ImportanceSpec extends AnyFunSuite with Matchers:
         dist = missing(UnknownReason.NoSymptom))
     )
     r.scoredOn shouldBe empty
-    r.composite shouldBe 0.0
-    // and the caller can tell this apart from a genuine 0.0 across three known dimensions
+    r.composite shouldBe None
+
+    // A genuine zero across three KNOWN dimensions is a real Some(0.0), not absent.
     val genuineZero = Importance.score(dims("zero", known(0.0), known(0), known(0)))
     genuineZero.scoredOn.size shouldBe 3
-    genuineZero.composite shouldBe 0.0
+    genuineZero.composite shouldBe Some(0.0)
+
+  test("nothing-known sorts last, without its absence being reported as a real score"):
+    val ranked = Importance.rank(Vector(
+      dims("known", known(0.1), known(1), known(1)),
+      dims("empty",
+        cov = missing(UnknownReason.BuildFailed),
+        blast = missing(UnknownReason.NoDebugInfo),
+        dist = missing(UnknownReason.NoSymptom))
+    ))
+    ranked.map(_.subject) shouldBe Vector("known", "empty")
+    ranked.find(_.subject == "empty").get.composite shouldBe None
 
   test("dimension scores saturate rather than being normalised across the batch"):
     // Absolute scales keep scores comparable between runs; min-max over the batch would make a
@@ -77,7 +95,7 @@ class ImportanceSpec extends AnyFunSuite with Matchers:
       ))
       .find(_.subject == "x").get
 
-    alone.composite shouldBe crowd.composite +- 0.0001
+    alone.composite.get shouldBe crowd.composite.get +- 0.0001
 
   test("ranking orders by composite, highest first"):
     val ranked = Importance.rank(Vector(

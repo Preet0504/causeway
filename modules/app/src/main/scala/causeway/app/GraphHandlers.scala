@@ -1,11 +1,12 @@
 package causeway.app
 
 import causeway.core.{RunId, UnknownReason}
-import causeway.graphstore.{BugRow, CheckpointRow, FindingRow, Neo4jStore}
+import causeway.graphstore.{BugRow, CheckpointRow, Csv, DatasetAssembler, FindingRow, FindingWithEvidence, Neo4jStore}
 import causeway.mcp.{HandlerResult, Json, ToolHandler}
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.node.{ArrayNode, ObjectNode}
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.jdk.CollectionConverters.*
 import scala.util.Try
@@ -13,7 +14,9 @@ import scala.util.Try
 /** Persistence and run bookkeeping. */
 final class GraphHandlers(store: Option[Neo4jStore], handles: Handles):
 
-  def all: Vector[ToolHandler] = Vector(upsertBug, query, resumeState, checkpoint, exportRun)
+  def all: Vector[ToolHandler] =
+    Vector(upsertBug, query, resumeState, checkpoint, exportRun, exportDataset,
+           bugList, bugDetail, listRuns)
 
   private def str(a: JsonNode, f: String): Option[String] =
     Option(a.get(f)).filter(_.isTextual).map(_.stringValue())
@@ -42,6 +45,14 @@ final class GraphHandlers(store: Option[Neo4jStore], handles: Handles):
     *
     * A bug failing admission is stored with `admitted: false` and a reason — never dropped
     * (D2), because deletion makes the dataset's selection bias invisible.
+    *
+    * Every field is OPTIONAL, and a field the record omits leaves the graph's existing value
+    * untouched (`Neo4jStore.putBug` coalesces) rather than resetting it to absent. This is what
+    * lets the phase commands call this repeatedly across separate invocations — S4-S5 writing
+    * verdict and fault location, S6 writing admission, S8 writing importance — without one call
+    * clobbering what an earlier one wrote. `admitted` in particular is read as present-or-absent,
+    * not defaulted to `false`: a record that never mentions admission is silent on it, not a
+    * rejection.
     */
   private def upsertBug: ToolHandler = handler("graph_upsert_bug") { a =>
     withStore { s =>
@@ -54,17 +65,28 @@ final class GraphHandlers(store: Option[Neo4jStore], handles: Handles):
               val fix  = str(rec, "fixSha").getOrElse("")
               if repo.isEmpty || fix.isEmpty then na("record needs repo and fixSha")
               else
-                val admitted = Option(rec.get("admitted")).filter(_.isBoolean)
-                  .map(_.booleanValue()).getOrElse(false)
+                def ranges(field: String): Vector[causeway.graphstore.RangeRow] =
+                  Option(rec.get(field)).filter(_.isArray).map(_.values().asScala.toVector).getOrElse(Vector.empty)
+                    .flatMap { n =>
+                      for
+                        file  <- str(n, "file")
+                        start <- Option(n.get("start")).filter(_.isNumber).map(_.intValue())
+                        end   <- Option(n.get("end")).filter(_.isNumber).map(_.intValue())
+                      yield causeway.graphstore.RangeRow(file, start, end)
+                    }
                 Try {
                   s.putBug(
-                    repo, fix, admitted,
-                    str(rec, "rejectedFor"),
-                    Option(rec.get("importance")).filter(_.isNumber).map(_.doubleValue()),
-                    Option(rec.get("scoredOn")).filter(_.isArray)
+                    repo = repo, fixSha = fix,
+                    admitted = Option(rec.get("admitted")).filter(_.isBoolean).map(_.booleanValue()),
+                    rejectedFor = str(rec, "rejectedFor"),
+                    importance = Option(rec.get("importance")).filter(_.isNumber).map(_.doubleValue()),
+                    scoredOn = Option(rec.get("scoredOn")).filter(_.isArray)
                       .map(_.values().asScala.toVector.map(_.stringValue())).getOrElse(Vector.empty),
-                    str(rec, "reproducerTier"),
-                    str(rec, "pathFidelity")
+                    reproducerTier = str(rec, "reproducerTier"),
+                    pathFidelity = str(rec, "pathFidelity"),
+                    parentSha = str(rec, "parentSha"),
+                    oldRanges = ranges("oldRanges"),
+                    newRanges = ranges("newRanges")
                   )
                 }.toEither match
                   case Left(t) => HandlerResult.Undetermined(UnknownReason.ToolUnavailable, t.getMessage)
@@ -278,4 +300,227 @@ final class GraphHandlers(store: Option[Neo4jStore], handles: Handles):
             // field exists so a caller can tell a truncated file from a complete one.
             n.put("byteSize", byteSize)
             HandlerResult.Data(n)
+  }
+
+  /** The deliverable: five files a researcher can open with no prior context on this project.
+    *
+    * `graph_upsert_bug` reads eight scalar fields off an untyped `record` and drops everything
+    * else without complaint — a note from a real run caught this. `export_run`'s own output
+    * schema never described what was inside the file it wrote, only the wrapper around it.
+    * Neither is "the dataset" in any sense a researcher could rely on; this is, and it is built
+    * by querying the graph directly rather than trusting whatever an agent happened to pass
+    * through a prior write.
+    *
+    * Findings are joined through `Bug.fixSha`, not filtered by this one runId — see
+    * `Neo4jStore.bugFindings` for why a strict runId filter would silently omit real findings
+    * recorded under an earlier, un-adopted server-process id for the same mining effort.
+    */
+  private def exportDataset: ToolHandler = handler("export_dataset") { a =>
+    (str(a, "runId").flatMap(r => RunId(r).toOption), store) match
+      case (None, _) => na("a valid runId is required")
+      case (_, None) =>
+        HandlerResult.Undetermined(UnknownReason.ToolUnavailable,
+          "no graph store connected; there is nothing persisted to export")
+      case (Some(runId), Some(st)) =>
+        Try {
+          val repo = st.repoForRun(runId).getOrElse("")
+          if repo.isEmpty then
+            throw new RuntimeException(s"no repository is associated with run '${runId.value}'")
+
+          val bugs        = st.bugsForRepo(repo)
+          val bugFindings = st.bugFindings(repo)
+          val runFindings = st.runLevelFindings(repo)
+
+          val records = DatasetAssembler.bugRecords(runId.value, bugs, bugFindings)
+          val hops    = DatasetAssembler.pathHops(runId.value, bugFindings)
+          val allFindings = bugFindings ++ runFindings
+
+          val evidenceIds = allFindings.flatMap(_.evidenceIds).distinct
+          val evidenceRows = st.evidenceByIds(evidenceIds)
+
+          val outDir = handles.workspace.resolve("exports").resolve(runId.value).resolve("dataset")
+          Files.createDirectories(outDir)
+
+          def writeFile(name: String, content: String): ObjectNode =
+            val bytes = content.getBytes(StandardCharsets.UTF_8)
+            Files.write(outDir.resolve(name), bytes)
+            val o = Json.obj()
+            o.put("name", name); o.put("byteSize", bytes.length)
+            o
+
+          val runMetadata =
+            buildRunMetadata(runId.value, repo, records.size, records.count(_.admitted), runFindings)
+
+          val files = Vector(
+            "bugs.csv" -> Csv.file(DatasetAssembler.BugColumns, records.map(DatasetAssembler.bugRow)),
+            "path_hops.csv" -> Csv.file(DatasetAssembler.PathHopColumns, hops.map(DatasetAssembler.pathHopRow)),
+            "findings.csv" -> Csv.file(DatasetAssembler.FindingColumns, allFindings.map(DatasetAssembler.findingRow)),
+            "evidence.csv" -> Csv.file(DatasetAssembler.EvidenceColumns, evidenceRows.map(DatasetAssembler.evidenceRow)),
+            "run_metadata.json" -> Json.write(runMetadata),
+            "CODEBOOK.md" -> DatasetAssembler.codebook(runId.value, java.time.Instant.now().toString)
+          ).map(writeFile)
+
+          (outDir, files, records.size, records.count(_.admitted))
+        }.toEither match
+          case Left(t) =>
+            HandlerResult.Undetermined(UnknownReason.ToolUnavailable,
+              Option(t.getMessage).getOrElse(t.toString))
+          case Right((outDir, files, bugCount, admittedCount)) =>
+            val n = Json.obj()
+            n.put("datasetDir", outDir.toAbsolutePath.toString)
+            val fs = arr(n, "files")
+            files.foreach(fs.add)
+            n.put("bugCount", bugCount)
+            n.put("admittedCount", admittedCount)
+            HandlerResult.Data(n)
+  }
+
+  /** `BuildRecipe` and `Strategy` describe the run itself, not any one bug, so they live here
+    * rather than as columns repeated identically on every row of `bugs.csv` — a value that never
+    * varies by row is a sign of the wrong grain, not a sign the schema needs a confidence rule.
+    */
+  private def buildRunMetadata(
+      runId: String, repo: String, bugCount: Int, admittedCount: Int,
+      runFindings: Vector[FindingWithEvidence]
+  ): ObjectNode =
+    val meta = Json.obj()
+    meta.put("schemaVersion", DatasetAssembler.SchemaVersion)
+    meta.put("runId", runId)
+    meta.put("repo", repo)
+    meta.put("exportedAt", java.time.Instant.now().toString)
+    meta.put("bugCount", bugCount)
+    meta.put("admittedCount", admittedCount)
+
+    def findingNode(f: FindingWithEvidence): ObjectNode =
+      val o = Json.obj()
+      o.put("findingId", f.findingId); o.put("agent", f.agent); o.put("confidence", f.confidence)
+      o.set("claim", causeway.graphstore.ClaimField.parse(f.claimJson))
+      val ev = arr(o, "evidenceIds"); f.evidenceIds.foreach(ev.add)
+      o
+
+    runFindings.find(_.claimType == "BuildRecipe").foreach(f => meta.set("buildRecipe", findingNode(f)))
+    val strategies = arr(meta, "strategy")
+    runFindings.filter(_.claimType == "Strategy").foreach(f => strategies.add(findingNode(f)))
+    meta
+
+  /** Resolve repo, bugs and per-bug findings once, the way every read-side handler below needs
+    * them. Shared rather than repeated, so `/inspect-bugs`, `/inspect-bug` and `export_dataset`
+    * can never quietly drift into disagreeing about the same bug.
+    */
+  private def loadRepo(st: Neo4jStore, runId: RunId): Option[(String, Vector[BugRow], Vector[causeway.graphstore.FindingWithEvidence])] =
+    st.repoForRun(runId).map { repo =>
+      (repo, st.bugsForRepo(repo), st.bugFindings(repo))
+    }
+
+  private def compactBugNode(r: causeway.graphstore.BugRecord): ObjectNode =
+    val o = Json.obj()
+    o.put("fixSha", r.fixSha); o.put("admitted", r.admitted)
+    r.admittedReason.foreach(o.put("admittedReason", _))
+    r.verdict.foreach(o.put("verdict", _))
+    r.symptomClass.foreach(o.put("symptomClass", _))
+    r.reproducerTier.foreach(o.put("reproducerTier", _))
+    r.pathTier.foreach(o.put("pathTier", _))
+    r.pathFidelity.foreach(o.put("pathFidelity", _))
+    r.importance.foreach(o.put("importance", _))
+    o
+
+  /** Every bug for a repository, compact — the list `/inspect-bugs` and `/list-runs` render. */
+  private def bugList: ToolHandler = handler("graph_bug_list") { a =>
+    withStore { s =>
+      str(a, "runId").flatMap(r => RunId(r).toOption) match
+        case None => na("a valid runId is required")
+        case Some(runId) =>
+          loadRepo(s, runId) match
+            case None => na(s"no repository is associated with run '${runId.value}'")
+            case Some((repo, bugs, findings)) =>
+              val records = DatasetAssembler.bugRecords(runId.value, bugs, findings)
+              val n = Json.obj()
+              n.put("repo", repo)
+              val bs = arr(n, "bugs")
+              records.foreach(r => bs.add(compactBugNode(r)))
+              n.put("count", records.size)
+              HandlerResult.Data(n)
+    }
+  }
+
+  /** Everything known about one bug: the full curated record plus its ordered path hops.
+    * `NotApplicable` when the fixSha names no bug at all, distinct from a bug that exists but
+    * has not reached later stages — the same distinction `Signal[A]` makes everywhere else.
+    */
+  private def bugDetail: ToolHandler = handler("graph_bug_detail") { a =>
+    withStore { s =>
+      (str(a, "runId").flatMap(r => RunId(r).toOption), str(a, "fixSha")) match
+        case (None, _) => na("a valid runId is required")
+        case (_, None) => na("fixSha is required")
+        case (Some(runId), Some(fixSha)) =>
+          loadRepo(s, runId) match
+            case None => na(s"no repository is associated with run '${runId.value}'")
+            case Some((repo, bugs, findings)) =>
+              bugs.find(_.fixSha == fixSha) match
+                case None => na(s"no bug '$fixSha' recorded for $repo")
+                case Some(bug) =>
+                  val record = DatasetAssembler.bugRecords(runId.value, Vector(bug), findings).head
+                  val hops = DatasetAssembler.pathHops(runId.value, findings.filter(_.subject == fixSha))
+
+                  val n = Json.obj()
+                  n.put("repo", repo); n.put("fixSha", record.fixSha); n.put("admitted", record.admitted)
+                  record.admittedReason.foreach(n.put("admittedReason", _))
+                  record.parentSha.foreach(n.put("parentSha", _))
+                  val or = arr(n, "oldRanges"); record.oldRanges.foreach(rg => or.add(rg.toString))
+                  val nr = arr(n, "newRanges"); record.newRanges.foreach(rg => nr.add(rg.toString))
+                  record.verdict.foreach(n.put("verdict", _))
+                  record.verdictConfidence.foreach(n.put("verdictConfidence", _))
+                  record.verdictRationale.foreach(n.put("verdictRationale", _))
+                  record.symptomClass.foreach(n.put("symptomClass", _))
+                  record.symptomDescription.foreach(n.put("symptomDescription", _))
+                  record.symptomEntryPoint.foreach(n.put("symptomEntryPoint", _))
+                  val sg = arr(n, "symptomGaps"); record.symptomGaps.foreach(sg.add)
+                  record.reproducerTier.foreach(n.put("reproducerTier", _))
+                  record.reproducerTestSelector.foreach(n.put("reproducerTestSelector", _))
+                  val rd = arr(n, "reproducerDiffersOn"); record.reproducerDiffersOn.foreach(rd.add)
+                  record.pathTier.foreach(n.put("pathTier", _))
+                  record.pathFidelity.foreach(n.put("pathFidelity", _))
+                  record.pathObservedSteps.foreach(n.put("pathObservedSteps", _))
+                  record.pathHopCount.foreach(n.put("pathHopCount", _))
+
+                  val hopsArr = arr(n, "hops")
+                  hops.foreach { h =>
+                    val ho = Json.obj()
+                    ho.put("hopN", h.hopN)
+                    h.fromMethod.foreach(ho.put("fromMethod", _))
+                    h.toMethod.foreach(ho.put("toMethod", _))
+                    h.relation.foreach(ho.put("relation", _))
+                    h.carrier.foreach(ho.put("carrier", _))
+                    h.oldLines.foreach(ho.put("oldLines", _))
+                    h.executed.foreach(ho.put("executed", _))
+                    hopsArr.add(ho)
+                  }
+
+                  n.put("findingCount", record.findingCount)
+                  n.put("evidenceCount", record.evidenceCount)
+                  HandlerResult.Data(n)
+    }
+  }
+
+  /** Every run this server has ever seen. The only handler in this file that does not need a
+    * runId, because its whole purpose is answering "what have I mined" for someone who does not
+    * have one yet.
+    */
+  private def listRuns: ToolHandler = handler("graph_list_runs") { a =>
+    withStore { s =>
+      val runs = s.allRuns()
+      val n = Json.obj()
+      val rs = arr(n, "runs")
+      runs.foreach { run =>
+        val stages = RunId(run.runId).toOption.map(s.resumeState).getOrElse(Vector.empty)
+        val o = Json.obj()
+        o.put("runId", run.runId); o.put("repo", run.repo); o.put("lastSeen", run.lastSeen)
+        o.put("complete", stages.nonEmpty && stages.forall(_.pending == 0))
+        o.put("bugCount", s.bugCount(run.repo))
+        o.put("admittedCount", s.bugCount(run.repo, admittedOnly = true))
+        rs.add(o)
+      }
+      n.put("count", runs.size)
+      HandlerResult.Data(n)
+    }
   }

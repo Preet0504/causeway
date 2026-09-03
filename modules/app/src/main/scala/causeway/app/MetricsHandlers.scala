@@ -225,7 +225,11 @@ object MetricsHandlers:
       Importance.rank(dims).foreach { r =>
         val o = Json.obj()
         o.put("fixSha", r.subject)
-        o.put("composite", r.composite)
+        // Omitted, not defaulted, when nothing was known: a caller checking for a fabricated
+        // 0.0 would never find one, but a caller reading only `importance` without also
+        // checking `scoredOn` still cannot mistake "not measured" for "measured as zero" — the
+        // field simply is not there.
+        r.composite.foreach(o.put("composite", _))
         val d = Json.obj()
         r.dimensions.foreach { case (k, v) => d.put(k, v) }
         o.set("dimensions", d)

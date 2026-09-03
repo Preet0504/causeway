@@ -64,7 +64,8 @@
               "$ref": "causeway://schemas/_common.json#/$defs/commitId"
             },
             "composite": {
-              "type": "number"
+              "type": "number",
+              "description": "Absent, not 0.0, when scoredOn is empty (nothing was known for this bug). A numeric 0.0 here always means a real composite was computed from at least one Known dimension."
             },
             "dimensions": {
               "type": "object",
@@ -84,7 +85,6 @@
           },
           "required": [
             "fixSha",
-            "composite",
             "scoredOn",
             "rank"
           ],

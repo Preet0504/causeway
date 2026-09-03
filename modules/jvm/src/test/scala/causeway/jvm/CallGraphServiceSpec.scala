@@ -51,6 +51,16 @@ class CallGraphServiceSpec extends AnyFunSuite with Matchers:
       write("Isolated.java",
         """public class Isolated {
           |    public String alone() { return "never calls the loader"; }
+          |}""".stripMargin),
+      // Two overloads sharing arity (one parameter each) but not type — the shape that broke
+      // count-only disambiguation live: org.json.XML#toJSONObject(String) vs #toJSONObject(Reader).
+      write("Ambiguous.java",
+        """import java.io.Reader;
+          |public class Ambiguous {
+          |    public String parse(String s) { return "from-string"; }
+          |    public String parse(Reader r) { return "from-reader"; }
+          |    public String viaString(String s) { return parse(s); }
+          |    public String viaReader(Reader r) { return parse(r); }
           |}""".stripMargin)
     )
 
@@ -90,6 +100,19 @@ class CallGraphServiceSpec extends AnyFunSuite with Matchers:
     ) match
       case Left(msg) => msg should include("entry points")
       case Right(_)  => fail("should have refused to build from unresolvable entry points")
+
+  // Found live: two builds over the SAME classpath with DIFFERENT entry points produced the
+  // IDENTICAL callGraphId, because the id was `(classpath + algorithm).hashCode` — entryPoints
+  // never participated at all. Handles.registerCallGraph keys a mutable map on the id and
+  // overwrites whatever was there, so the second build silently replaced the first graph under
+  // an id a caller might still be holding, believing it pointed at the graph they built.
+  test("the same classpath with different entry points gets a different id"):
+    val a = handle(Vector(handlerEntry))
+    val b = handle(Vector(faultSite))
+    a.id should not equal b.id
+
+  test("the same classpath and the same entry points get the same id — still content-addressed"):
+    handle(Vector(handlerEntry)).id shouldBe handle(Vector(handlerEntry)).id
 
   test("direct callees are reported"):
     val h = handle(Vector(handlerEntry))
@@ -179,6 +202,49 @@ class CallGraphServiceSpec extends AnyFunSuite with Matchers:
     CallGraphService.descriptorParamCount("(java.lang.String)java.lang.String") shouldBe Some(1)
     CallGraphService.descriptorParamCount("()java.lang.String") shouldBe Some(0)
     CallGraphService.descriptorParamCount("(int,long)void") shouldBe Some(2)
+
+  // Found live: parameter COUNT alone is not always enough to discriminate — a path-tracer
+  // supplied `toJSONObject(String)` and silently got back a path headed by `toJSONObject
+  // (Reader)`, a DIFFERENT overload with the same arity, entered because `.find(_.getParameterCount
+  // == n)` returns whichever candidate the view happens to enumerate first among ties. Only
+  // caught because the agent independently re-derived the query and noticed the returned method
+  // never appeared in its own trace's executed set.
+  test("an overload sharing arity but not type is resolved by type, not merely count"):
+    val h = handle(Vector(handlerEntry))
+    val byString = MethodRef("Ambiguous", "parse", "(java.lang.String)java.lang.String")
+    val byReader = MethodRef("Ambiguous", "parse", "(java.io.Reader)java.lang.String")
+
+    val stringSig = CallGraphService.resolve(h.view, byString).get
+    val readerSig = CallGraphService.resolve(h.view, byReader).get
+
+    stringSig should not equal readerSig
+    stringSig.getParameterTypes.get(0).toString shouldBe "java.lang.String"
+    readerSig.getParameterTypes.get(0).toString shouldBe "java.io.Reader"
+
+  test("the same disambiguation works from the JVM bytecode descriptor dialect too"):
+    val h = handle(Vector(handlerEntry))
+    val byString = MethodRef("Ambiguous", "parse", "(Ljava/lang/String;)Ljava/lang/String;")
+    val byReader = MethodRef("Ambiguous", "parse", "(Ljava/io/Reader;)Ljava/lang/String;")
+
+    CallGraphService.resolve(h.view, byString).get.getParameterTypes.get(0).toString shouldBe "java.lang.String"
+    CallGraphService.resolve(h.view, byReader).get.getParameterTypes.get(0).toString shouldBe "java.io.Reader"
+
+  test("a path query anchored at one same-arity overload does not silently walk the other's edges"):
+    val h = handle(Vector(
+      MethodRef("Ambiguous", "viaString", "(java.lang.String)java.lang.String"),
+      MethodRef("Ambiguous", "viaReader", "(java.io.Reader)java.lang.String")
+    ))
+    val calleesOfViaString = CallGraphService.callees(
+      h, MethodRef("Ambiguous", "viaString", "(java.lang.String)java.lang.String")
+    ).toOption.get
+    val calleesOfViaReader = CallGraphService.callees(
+      h, MethodRef("Ambiguous", "viaReader", "(java.io.Reader)java.lang.String")
+    ).toOption.get
+
+    calleesOfViaString.map(_.signature) should contain("Ambiguous.parse(java.lang.String)java.lang.String")
+    calleesOfViaString.map(_.signature) should not contain "Ambiguous.parse(java.io.Reader)java.lang.String"
+    calleesOfViaReader.map(_.signature) should contain("Ambiguous.parse(java.io.Reader)java.lang.String")
+    calleesOfViaReader.map(_.signature) should not contain "Ambiguous.parse(java.lang.String)java.lang.String"
 
   test("an overload that cannot be matched is refused rather than guessed"):
     val h = handle(Vector(handlerEntry))

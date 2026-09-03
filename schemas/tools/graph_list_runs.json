@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/graph_list_runs.json",
+  "name": "graph_list_runs",
+  "title": "graph.list_runs",
+  "description": "Every mining run this server has ever seen, most recent first, each with its resume state. Backs /list-runs. A user with no prior context has no repo, no runId, and no starting point except 'what have I mined so far' — nothing else answers that without already knowing what to ask for.",
+  "x-causeway": {
+    "class": "P",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "ToolUnavailable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "runs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "runId": { "type": "string" },
+            "repo": { "type": "string" },
+            "lastSeen": { "type": "string" },
+            "complete": { "type": "boolean" },
+            "bugCount": { "type": "integer" },
+            "admittedCount": { "type": "integer" }
+          },
+          "required": ["runId", "repo", "lastSeen", "complete"],
+          "additionalProperties": false
+        }
+      },
+      "count": { "type": "integer" }
+    },
+    "required": ["runs", "count"],
+    "additionalProperties": false
+  }
+}

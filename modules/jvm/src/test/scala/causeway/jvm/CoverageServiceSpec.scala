@@ -199,6 +199,31 @@ class CoverageServiceSpec extends AnyFunSuite with Matchers:
     cmd should include("-Xss640k")
     cmd should include("JAVA_TOOL_OPTIONS")
 
+  // Found live: every JVM in the build inherits the agent (see above), Maven's own included, and
+  // for a project whose compiler plugin runs javac in-process that JVM IS Maven's. Instrumenting
+  // javac's own deeply recursive attribution pass blew the default thread stack and aborted the
+  // compile with StackOverflowError — reported by Maven only as "An unknown compilation problem
+  // occurred", with no exec file and no test having run at either revision. Reproduced by hand:
+  // the identical container command succeeded once javac's and Maven's own classes were excluded
+  // from instrumentation.
+  test("the compiler's and build tool's own classes are excluded from instrumentation by default"):
+    val cmd = CoverageService.instrumentedCommand("mvn -B test")
+    cmd should include("excludes=")
+    cmd should include("com.sun.tools.*")
+    cmd should include("org.apache.maven.*")
+
+  test("an explicit excludes argument overrides the default rather than being ignored"):
+    val cmd = CoverageService.instrumentedCommand("mvn -B test", excludes = "foo.Bar")
+    cmd should include("excludes=foo.Bar")
+    cmd should not include "com.sun.tools.*"
+
+  test("agentArg omits the excludes clause entirely when none is given"):
+    // runLocally attaches this straight to a generated harness's own `java` invocation, where
+    // only the harness's and the repo's classes ever load — there is nothing to exclude there,
+    // and an empty `excludes=` clause would be noise in every other test asserting on this string.
+    val arg = CoverageService.agentArg("/x/jacocoagent.jar", "/x/jacoco.exec")
+    arg should not include "excludes"
+
   // The id identifies a MEASUREMENT. It used to hash the exec file's PATH, which is
   // `<clone>/.causeway/jacoco.exec` for every run of a repository — so the parent revision and
   // the fix, the two measurements this project exists to compare, shared an id.

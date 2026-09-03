@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "causeway://schemas/tools/graph_bug_detail.json",
+  "name": "graph_bug_detail",
+  "title": "graph.bug_detail",
+  "description": "Everything the graph knows about ONE bug: the full curated bugs.csv-shaped record, plus its path hops in order if it has any. Backs /inspect-bug, /verify-bug, /explain-gap and /cite-bug. Returns Unknown(NotApplicable) rather than an empty object when the fixSha names no bug for this repository, so a caller can distinguish 'this bug has not reached any stages yet' (a real row, mostly absent fields) from 'this fixSha does not exist' (no row at all).",
+  "x-causeway": {
+    "class": "P",
+    "module": "graphstore",
+    "permission": "allow",
+    "agents": [],
+    "unknownReasons": [
+      "ToolUnavailable",
+      "NotApplicable"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "runId": {
+        "$ref": "causeway://schemas/_common.json#/$defs/runId"
+      },
+      "fixSha": {
+        "$ref": "causeway://schemas/_common.json#/$defs/commitId"
+      }
+    },
+    "required": [
+      "runId",
+      "fixSha"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "description": "Describes the `data` payload ONLY. The envelope { ok, evidenceId, data | unknown } is universal and enforced by modules/mcpserver.",
+    "type": "object",
+    "properties": {
+      "repo": { "type": "string" },
+      "fixSha": { "type": "string" },
+      "admitted": { "type": "boolean" },
+      "admittedReason": { "type": "string" },
+      "parentSha": { "type": "string" },
+      "oldRanges": { "type": "array", "items": { "type": "string" } },
+      "newRanges": { "type": "array", "items": { "type": "string" } },
+      "verdict": { "type": "string" },
+      "verdictConfidence": { "type": "number" },
+      "verdictRationale": { "type": "string" },
+      "symptomClass": { "type": "string" },
+      "symptomDescription": { "type": "string" },
+      "symptomEntryPoint": { "type": "string" },
+      "symptomGaps": { "type": "array", "items": { "type": "string" } },
+      "reproducerTier": { "type": "string" },
+      "reproducerTestSelector": { "type": "string" },
+      "reproducerDiffersOn": { "type": "array", "items": { "type": "string" } },
+      "pathTier": { "type": "string" },
+      "pathFidelity": { "type": "string" },
+      "pathObservedSteps": { "type": "number" },
+      "pathHopCount": { "type": "number" },
+      "hops": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "hopN": { "type": "integer" },
+            "fromMethod": { "type": "string" },
+            "toMethod": { "type": "string" },
+            "relation": { "type": "string" },
+            "carrier": { "type": "string" },
+            "oldLines": { "type": "string" },
+            "executed": { "type": "boolean" }
+          },
+          "required": ["hopN"],
+          "additionalProperties": false
+        }
+      },
+      "findingCount": { "type": "integer" },
+      "evidenceCount": { "type": "integer" }
+    },
+    "required": ["repo", "fixSha", "admitted"],
+    "additionalProperties": false
+  }
+}

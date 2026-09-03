@@ -111,15 +111,48 @@ final class Handles(val workspace: Path):
 
   def repoHandle(url: String): String = digest(url, "repo")
 
+  /** Registers a clone AND journals it — found missing by actually running a mining session:
+    * `builds` and `coverage` were journaled, `repos` never was, so a server restart mid-run
+    * (recovering from an unrelated fix) dropped every repoHandle's clone binding while the
+    * clone itself sat untouched on disk. Every tool needing the clone returned
+    * `Unknown(NotApplicable)` until `repo_clone` was called a second time by hand. `builds` and
+    * `coverage` already rehydrate from disk on a miss (see `rehydrateBuild`,
+    * `rehydrateCoverage`); `repos` now does too, the same way.
+    */
   def register(handle: String, svc: GitService, dir: Path, url: String = ""): Unit =
     repos.put(handle, (svc, dir))
     if url.nonEmpty then remotes.put(handle, url)
+    journal("kind" -> "repo", "handle" -> handle,
+            "dir" -> dir.toAbsolutePath.toString, "url" -> url)
+
+  /** Recover a repo handle issued by an earlier process.
+    *
+    * Only if the directory is still a git repository — a handle pointing at a deleted or
+    * half-cloned directory would be worse than a miss, since every downstream call would look
+    * like it succeeded against an empty tree.
+    */
+  private def rehydrateRepo(handle: String): Option[(GitService, Path)] =
+    for
+      row <- recorded(handle)
+      dir <- row.get("dir").map(Path.of(_)) if Files.isDirectory(dir.resolve(".git")) || Files.isRegularFile(dir.resolve(".git"))
+      svc <- GitService.open(dir).toOption
+    yield
+      repos.put(handle, (svc, dir))
+      row.get("url").filter(_.nonEmpty).foreach(remotes.put(handle, _))
+      (svc, dir)
+
+  private def repo(handle: String): Option[(GitService, Path)] =
+    repos.get(handle).orElse(rehydrateRepo(handle))
 
   /** The URL a clone came from, so owner/name can be derived rather than guessed. */
-  def remoteUrl(handle: String): Option[String] = remotes.get(handle)
+  def remoteUrl(handle: String): Option[String] =
+    remotes.get(handle).orElse {
+      val _ = repo(handle) // trigger rehydration, which repopulates `remotes` as a side effect
+      remotes.get(handle)
+    }
 
-  def git(handle: String): Option[GitService] = repos.get(handle).map(_._1)
-  def dir(handle: String): Option[Path]       = repos.get(handle).map(_._2)
+  def git(handle: String): Option[GitService] = repo(handle).map(_._1)
+  def dir(handle: String): Option[Path]       = repo(handle).map(_._2)
 
   // ── builds ─────────────────────────────────────────────────────────────
 
@@ -253,17 +286,60 @@ final class Handles(val workspace: Path):
 
   // ── execution traces ───────────────────────────────────────────────────
 
-  /** Record what actually ran during a reproducing execution.
+  /** Field separator within one method, and between methods, in the journal row. ``/
+    * `` rather than a printable character: a descriptor can carry almost anything a JVM
+    * type signature allows, and an fqcn can carry a dot, so no printable delimiter is safe.
+    * Matches the convention `NativeTestRunner.Sep` already uses for the same reason.
+    */
+  private val TraceFieldSep  = 1.toChar.toString
+  private val TraceMethodSep = 2.toChar.toString
+
+  /** Record what actually ran during a reproducing execution, AND journal it.
     *
     * Keyed by content so the same run resolves to the same id across a restart, like every
-    * other handle here.
+    * other handle here — but unlike builds and coverage, there is no artifact on disk this can
+    * be RE-DERIVED from: the container that produced it is `--rm`, gone the moment the run
+    * ends, and the differential tools are idempotent on their inputs (found live: replaying the
+    * identical harness after a trace was lost returned the same cached differential result
+    * without re-executing, so it could not re-register one either). A restart previously meant
+    * every trace issued so far was gone for good, with the only recovery being to perturb the
+    * input and re-run the whole differential — costly, and for one bug outright non-deterministic
+    * (a timeout-raced test produced a genuinely different executed set on retry). Found by
+    * actually running a mining session: three separate path-tracer dispatches lost their trace
+    * to an unrelated server restart mid-run, each losing real analysis work to rediscover that
+    * the trace their tasking cited no longer existed. The content itself is small — a method
+    * list, not a multi-hundred-megabyte call graph — so, unlike a call graph, journaling it
+    * costs nothing worth measuring.
     */
   def registerTrace(methods: Vector[MethodRef]): String =
     val id = digest(methods.map(_.signature).mkString("|"), "tr")
     traces.put(id, methods)
+    journal("kind" -> "trace", "handle" -> id,
+      "methods" -> methods.map(m => s"${m.fqcn}$TraceFieldSep${m.name}$TraceFieldSep${m.descriptor}")
+        .mkString(TraceMethodSep))
     id
 
-  def trace(id: String): Option[Vector[MethodRef]] = traces.get(id)
+  /** Recover a trace issued by an earlier process, from its journaled method list.
+    *
+    * The id is recomputed from the decoded content and compared against what was asked for — a
+    * mismatch means the row is corrupt (or, if journal rows are ever pruned/compacted by hand,
+    * stale) and must not be handed back silently mislabelled as the id it does not match.
+    */
+  private def rehydrateTrace(id: String): Option[Vector[MethodRef]] =
+    for
+      row <- recorded(id)
+      raw <- row.get("methods")
+      methods = if raw.isEmpty then Vector.empty
+        else raw.split(TraceMethodSep, -1).toVector.map { entry =>
+          val parts = entry.split(TraceFieldSep, -1)
+          MethodRef(parts(0), parts(1), if parts.length > 2 then parts(2) else "")
+        }
+      if digest(methods.map(_.signature).mkString("|"), "tr") == id
+    yield
+      traces.put(id, methods)
+      methods
+
+  def trace(id: String): Option[Vector[MethodRef]] = traces.get(id).orElse(rehydrateTrace(id))
 
   // ── lifecycle ──────────────────────────────────────────────────────────
 
