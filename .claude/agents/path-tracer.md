@@ -68,6 +68,26 @@ Never collapse these two into one confidence number. The distinction between "po
   with `resolution: FILE_LEVEL` rather than guessing method names.
 - Do not describe the fix. Someone else can read the diff. Describe the route the fault took.
 - Emit via `findings_record` with evidenceIds for every hop.
+
+## The exact shape `export_dataset` reads
+
+`claimType` must be the schema's `"PATH"`. Nest the route under a `hops` array in `claim` — not
+`path`, `route`, or `steps` — one object per hop, in order, with exactly these keys (unused ones
+omitted, never invented substitutes):
+
+```json
+{ "n": 0, "from": "fully.qualified.Type#method(ArgType)ReturnType",
+  "to": "fully.qualified.Type#method(ArgType)ReturnType",
+  "relation": "DIRECT_CALL | INTERFACE_CALLBACK | ...", "carrier": "what the body does that matters",
+  "oldLines": "file.java:123-125", "executed": true, "evidence": ["ev_..."] }
+```
+
+`export_dataset` denormalises straight from this array into `path_hops.csv` — `from`/`to` (not
+`fromMethod`/`toMethod`), `evidence` (not `evidenceIds`), `n` (defaults to array index if
+omitted). A hop missing any of these under a different key name is silently dropped from the
+exported dataset even though the finding itself recorded correctly — the route exists in
+`findings.csv` but the primary artifact, `path_hops.csv`, comes out empty for it. Get the keys
+exactly right; nothing downstream checks or repairs this shape for you.
 ## Notes
 
 Before you start, call `notes_list_subjects` for this repository and `notes_read` on anything
