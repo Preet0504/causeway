@@ -1,0 +1,9 @@
+.claude/settings.local.json
+target/
+project/target/
+project/project/
+.bsp/
+.bloop/
+.metals/
+workspace/
+.env
