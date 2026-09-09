@@ -27,7 +27,7 @@ From the repository root:
 sbt -batch "runMain causeway.mini.EnrichCommits --evidence-file <path-to-evidence-file>"
 ```
 
-This does two things, both bounded by the evidence file's own `bugCap` (only that many of the window's commits — the most recent ones — get enriched; if `bugCap` is null, every window commit is enriched):
+This does two things, both bounded by the evidence file's own `scanCommitLimit` (only that many of the window's commits, the most recent ones, get enriched; if `scanCommitLimit` is null, every window commit is enriched):
 - Fetches PRs and their closing issues for every commit in one batched GraphQL request per ~20 commits (not one request per commit).
 - Diffs every non-merge commit against its first parent using JGit, in parallel across a local thread pool (no network involved) — merge commits are recorded with `isMergeCommit: true` and no diff, since a merge's diff against any one parent doesn't represent the merge's own work.
 

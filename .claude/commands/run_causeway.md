@@ -51,7 +51,7 @@ Then ask the user to choose, offering exactly these options:
 
 If they pick "Other", ask them to state the window directly (e.g. "past 2 weeks", "since v2.0", "all time").
 
-Don't ask for a bug cap here — that's deliberately deferred to `/inspect_repo`, which can show the user how many commits actually fall in the window before asking them to pick a cap informed by that number.
+Don't ask for a scan commit limit here, that's deliberately deferred to `/inspect_repo`, which can show the user how many commits actually fall in the window before asking them to pick a limit informed by that number.
 
 ## 5. Final report
 
@@ -59,6 +59,6 @@ Produce one final message that states, plainly:
 - The repo that was validated (`owner/repo`)
 - The mining window chosen
 
-Then tell the user to run `/inspect_repo` next, which will clone the repo, show how many commits fall in this window, and ask for a bug cap at that point.
+Then tell the user to run `/inspect_repo` next, which will clone the repo, show how many commits fall in this window, and ask for a scan commit limit at that point.
 
 End the message with: "If anything above is wrong, just run /run_causeway again to start over."

@@ -41,17 +41,17 @@ object EnrichCommits:
     val owner = evidence("owner").str
     val repoName = evidence("repo").str
     val clonePath = evidence("clonePath").str
-    val bugCap: Option[Int] = evidence("bugCap") match
+    val scanCommitLimit: Option[Int] = evidence("scanCommitLimit") match
       case ujson.Null => None
       case v          => Some(v.num.toInt)
 
     val allCommits = evidence("commits").arr.toList
-    val commitsToEnrich = bugCap match
-      case Some(cap) => allCommits.take(cap)
-      case None      => allCommits
+    val commitsToEnrich = scanCommitLimit match
+      case Some(limit) => allCommits.take(limit)
+      case None        => allCommits
 
     System.err.println(
-      s"Enriching ${commitsToEnrich.size} of ${allCommits.size} window commits (bugCap=${bugCap.getOrElse("none")})"
+      s"Enriching ${commitsToEnrich.size} of ${allCommits.size} window commits (scanCommitLimit=${scanCommitLimit.getOrElse("none")})"
     )
 
     val shas = commitsToEnrich.map(_("sha").str)
@@ -84,7 +84,7 @@ object EnrichCommits:
       "repo" -> evidence("repo"),
       "clonePath" -> evidence("clonePath"),
       "window" -> evidence("window"),
-      "bugCap" -> evidence("bugCap"),
+      "scanCommitLimit" -> evidence("scanCommitLimit"),
       "windowCommitCount" -> evidence("windowCommitCount"),
       "enrichedCommitCount" -> enrichedCommits.size,
       "commits" -> ujson.Arr.from(enrichedCommits)

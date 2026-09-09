@@ -25,7 +25,7 @@ object InspectRepo:
       fail("--since-date is required (ISO date, e.g. 2026-06-05)")
     )
     val windowLabel = opts.getOrElse("window-label", sinceDateStr)
-    val cap = opts.get("cap").map(_.toInt)
+    val scanCommitLimit = opts.get("scan-commit-limit").map(_.toInt)
     val countOnly = opts.get("count-only").contains("true")
 
     val (owner, repo) = parseOwnerRepo(repoUrl)
@@ -68,8 +68,8 @@ object InspectRepo:
 
     if countOnly then
       // Preview mode: just report how many commits fall in the window, so the
-      // orchestrator can ask for a bug cap informed by that number. No evidence
-      // file is written — nothing here has been decided yet.
+      // orchestrator can ask for a scan commit limit informed by that number.
+      // No evidence file is written — nothing here has been decided yet.
       git.close()
       println(s"WINDOW_COMMIT_COUNT=${windowCommits.size}")
     else
@@ -106,7 +106,7 @@ object InspectRepo:
           "requested" -> windowLabel,
           "sinceDate" -> sinceDateStr
         ),
-        "bugCap" -> cap.map(c => ujson.Num(c.toDouble)).getOrElse(ujson.Null),
+        "scanCommitLimit" -> scanCommitLimit.map(c => ujson.Num(c.toDouble)).getOrElse(ujson.Null),
         "windowCommitCount" -> windowCommits.size,
         "commits" -> commitArr
       )
