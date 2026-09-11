@@ -84,6 +84,7 @@ object EnrichCommits:
       "repo" -> evidence("repo"),
       "clonePath" -> evidence("clonePath"),
       "window" -> evidence("window"),
+      "repoSnapshot" -> evidence("repoSnapshot"),
       "scanCommitLimit" -> evidence("scanCommitLimit"),
       "windowCommitCount" -> evidence("windowCommitCount"),
       "enrichedCommitCount" -> enrichedCommits.size,

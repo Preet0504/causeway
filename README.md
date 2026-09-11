@@ -29,10 +29,11 @@ This is the tool behind `/inspect_repo`. Internally it:
 
 1. Reads its command line flags: the repo URL, the cutoff date for the time window, and (optionally) a scan commit limit.
 2. Downloads the repo with JGit if it hasn't already been downloaded, or reuses the existing copy if it has.
-3. Walks backward through the commit history, starting from the newest commit.
-4. Stops as soon as it reaches a commit older than the chosen cutoff date, since everything after that point is guaranteed to be older too.
-5. If it was only asked to count (a "preview" mode), it just prints how many commits it found and stops there, without writing anything.
-6. Otherwise, it writes every commit it found, message, author, date, and so on, into a JSON file, along with the scan commit limit itself so later steps know what it was.
+3. Either way, fetches from the remote. A repo's URL never tells you what state it's actually in right now, its default branch moves, so a reused local copy would otherwise silently serve whatever it looked like the last time this tool touched it.
+4. Pins the exact commit the remote's default branch points to at this moment, and records that SHA, the branch name, and when it was retrieved, this is the run's repository snapshot.
+5. Walks backward through the commit history starting from that pinned commit, checking every commit's timestamp individually rather than assuming they only get older the further back it goes (a real Git history isn't guaranteed to be ordered that way, clock skew and rebases can produce a commit whose timestamp is later than its own parent's).
+6. If it was only asked to count (a "preview" mode), it just prints how many commits it found and stops there, without writing anything.
+7. Otherwise, it writes every commit it found, message, author, date, and so on, plus the repository snapshot and the scan commit limit, into a JSON file.
 
 ### `src/main/scala/causeway/mini/EnrichCommits.scala`
 
@@ -92,7 +93,7 @@ If anything above is wrong, just run /run_causeway again to start over.
 
 What happens, step by step:
 
-It downloads the repo (or reuses an already-downloaded copy). It counts how many commits fall inside the time window you chose, without writing anything yet. It shows you that number. It asks how many of those commits should be scanned in detail, being explicit that this is not about bugs yet, just about how many commits are worth a closer look. Once you answer, it writes out a JSON file listing every one of those commits.
+It downloads the repo (or reuses an already-downloaded copy), then fetches from the remote either way, and pins the exact commit the remote's default branch points to right now. It counts how many commits fall inside the time window you chose, as of that pinned commit, without writing anything yet. It shows you that number. It asks how many of those commits should be scanned in detail, being explicit that this is not about bugs yet, just about how many commits are worth a closer look. Once you answer, it writes out a JSON file listing every one of those commits, along with the pinned commit itself, so the run's results are tied to a specific, recorded state of the repo rather than whatever it happens to look like if someone checks again later.
 
 Example output:
 
@@ -104,7 +105,8 @@ should be scanned in detail?
 You answer, say, `6`. Then:
 
 ```
-Repo: stleary/JSON-java
+Repo: stleary/JSON-java (default branch: master)
+Pinned at commit: 4f859fdf3b
 Window: past 3 months (since 2026-06-05)
 Commits in window: 28
 Scan commit limit: 6
@@ -114,6 +116,17 @@ Next, run /inspect_commits, which will fetch each commit's linked
 GitHub PRs/issues and its JGit diff content.
 
 If anything above is wrong, just run /inspect_repo again to start over.
+```
+
+The evidence file's `repoSnapshot` records exactly what was pinned:
+
+```json
+{
+  "defaultBranch": "master",
+  "remoteHeadSha": "4f859fdf3b5669894c5ed8a305ee5cd5f1fe2b7a",
+  "retrievedAt": "2026-09-11T16:11:14.258592100Z",
+  "usedLocalHeadFallback": false
+}
 ```
 
 One commit from inside that JSON file looks like this (trimmed):

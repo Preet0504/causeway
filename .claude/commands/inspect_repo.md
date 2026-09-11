@@ -33,7 +33,7 @@ From the repository root, run:
 sbt -batch "runMain causeway.mini.InspectRepo --repo-url <repo-url> --since-date <iso-date> --window-label <slug> --count-only true"
 ```
 
-This clones the repo (or reuses an existing clone already on disk) under `workspace/<owner>-<repo>/` and walks its commit history from HEAD, but writes nothing, it's a cheap preview. Read `WINDOW_COMMIT_COUNT` from stdout.
+This clones the repo (or reuses an existing clone already on disk) under `workspace/<owner>-<repo>/`, always fetches from the remote first (a URL alone doesn't tell you what state a repo is in, its HEAD moves, and a reused clone could otherwise silently serve whatever it looked like the last time this tool ran against it), pins the exact commit SHA the remote's default branch points to right now, and walks from that pinned commit. Writes nothing yet, it's a cheap preview. Read `WINDOW_COMMIT_COUNT` from stdout.
 
 If the command fails, report the failure plainly and stop, don't guess at a number.
 
@@ -49,10 +49,11 @@ Run the tool again, this time without `--count-only` and with the limit:
 sbt -batch "runMain causeway.mini.InspectRepo --repo-url <repo-url> --since-date <iso-date> --window-label <slug> --scan-commit-limit <limit>"
 ```
 
-The clone from step 3 is reused, so this should be fast. It writes every commit within the window, full commit message, author, committer, dates, parent SHAs, plus the scan commit limit you now have, to a JSON evidence file under `workspace/exports/`.
+The clone from step 3 is reused, so this should be fast, but it fetches from the remote again since the count-only preview may have happened a while ago. It writes every commit within the window, full commit message, author, committer, dates, parent SHAs, plus the scan commit limit you now have, to a JSON evidence file under `workspace/exports/`. The evidence file also records a `repoSnapshot`: which branch was treated as the default, the exact remote commit SHA that branch pointed to for this run, and when that was retrieved, so this run's results are pinned to a specific, recorded repository state rather than whatever HEAD happens to contain if someone looks again later.
 
 Read the tool's stdout for:
-- `WINDOW_COMMIT_COUNT`, should match step 3's preview
+- `WINDOW_COMMIT_COUNT`, should match step 3's preview (it can differ if new commits landed on the remote between the preview and now, that's expected, not a bug)
+- `REMOTE_HEAD_SHA`, the pinned commit this run is based on
 - `EVIDENCE_FILE`, path to the JSON evidence file
 - `RUN_ID`, the run's identifier
 
@@ -63,7 +64,7 @@ If the tool behaves unexpectedly right after a code change to it, the sbt backgr
 ## 6. Final report
 
 Produce one final message stating, plainly:
-- The repo (`owner/repo`)
+- The repo (`owner/repo`), its default branch, and the remote commit SHA this run pinned (`REMOTE_HEAD_SHA`, shortened to 10 characters is fine)
 - The window chosen, and the resolved since-date (note if it was an approximation)
 - How many commits fall within the window
 - The scan commit limit chosen

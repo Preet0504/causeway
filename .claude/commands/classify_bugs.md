@@ -43,7 +43,7 @@ Render a markdown table, one row per commit you actually examined (not commits y
 ## 6. Write the final JSON file
 
 Write a new file next to the enriched evidence file (same directory, same base name with `_enriched` replaced by `_classified`, e.g. `run_<id>_classified.json`), containing:
-- The same top-level repo/window/scanCommitLimit fields as the enriched file, carried over
+- The same top-level repo/window/repoSnapshot/scanCommitLimit fields as the enriched file, carried over
 - `bugTarget`
 - `examinedCommitCount` (how many commits you actually classified before stopping)
 - `scannedCommitCount` (the evidence file's `enrichedCommitCount`, for comparison)
