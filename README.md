@@ -25,15 +25,14 @@ These two files are the project's setup. `build.sbt` says this is a Scala 3 proj
 
 ### `src/main/scala/causeway/mini/InspectRepo.scala`
 
-This is the tool behind `/inspect_repo`. Internally it:
+This is the tool behind `/inspect_repo`. It doesn't auto-detect which remote or which branch to use, a repo URL alone doesn't define that, a clone can have more than one remote (a fork's `origin` pointing at the fork, `upstream` at the original), and the "default" branch isn't necessarily the one worth mining. Instead it runs as one of four modes, each a separate invocation, so the orchestrator can show real options to the user between them:
 
-1. Reads its command line flags: the repo URL, the cutoff date for the time window, and (optionally) a scan commit limit.
-2. Downloads the repo with JGit if it hasn't already been downloaded, or reuses the existing copy if it has.
-3. Either way, fetches from the remote. A repo's URL never tells you what state it's actually in right now, its default branch moves, so a reused local copy would otherwise silently serve whatever it looked like the last time this tool touched it.
-4. Pins the exact commit the remote's default branch points to at this moment, and records that SHA, the branch name, and when it was retrieved, this is the run's repository snapshot.
-5. Walks backward through the commit history starting from that pinned commit, checking every commit's timestamp individually rather than assuming they only get older the further back it goes (a real Git history isn't guaranteed to be ordered that way, clock skew and rebases can produce a commit whose timestamp is later than its own parent's).
-6. If it was only asked to count (a "preview" mode), it just prints how many commits it found and stops there, without writing anything.
-7. Otherwise, it writes every commit it found, message, author, date, and so on, plus the repository snapshot and the scan commit limit, into a JSON file.
+1. **`list-remotes`**: downloads the repo with JGit if it hasn't already been downloaded, or opens the existing copy if it has, then prints every remote actually configured there, name and URL. Nothing is fetched yet.
+2. **`list-branches`**, given a chosen remote name: fetches from that remote (a repo's default branch moves, so a reused local copy would otherwise silently serve whatever it looked like last time this tool touched it), reads that remote's own configured URL, and asks GitHub's REST API for every branch on that repository, each with its current commit SHA, flagging whichever one GitHub calls the default.
+3. **`count`**, given a chosen remote, branch, and its exact SHA (from step 2's output): walks backward through commit history starting from that exact pinned commit, checking every commit's timestamp individually rather than assuming they only get older the further back it goes (a real Git history isn't guaranteed to be ordered that way, clock skew and rebases can produce a commit whose timestamp is later than its own parent's), and just prints how many fall in the window. Writes nothing, this is a cheap preview.
+4. **`write`**, same inputs as `count` plus a scan commit limit: writes every commit it found, message, author, date, and so on, plus which remote, branch, and SHA were pinned, into a JSON file.
+
+`count` and `write` never re-fetch or re-resolve the SHA they're given, they trust it outright, since that SHA is the exact thing a person already chose in step 2. Re-checking it against whatever's newest at that later moment would silently defeat the point of pinning.
 
 ### `src/main/scala/causeway/mini/EnrichCommits.scala`
 
@@ -52,7 +51,7 @@ Plain instructions for Claude to follow, not code. They say: ask the user for a 
 
 ### `.claude/commands/inspect_repo.md`
 
-Instructions that say: reuse the repo and time window from the previous command if they're already known, turn the chosen time window into an actual date, run the Scala tool once in preview mode to get a count, tell the user that count and ask for a scan commit limit, run the tool again for real, and point them to `/inspect_commits` next. The question is phrased carefully to avoid the word "bug", since at this point nothing has been examined closely enough to know what's a bug fix and what isn't, this number only decides how many commits get that closer look.
+Instructions that say: reuse the repo and time window from the previous command if they're already known, list the repo's configured remotes and let the user choose one (skipping the question if there's genuinely only one), list that remote's branches via GitHub and let the user choose one (the actual default branch is suggested), turn the chosen time window into an actual date, run the Scala tool once in preview mode to get a count, tell the user that count and ask for a scan commit limit, run the tool again for real, and point them to `/inspect_commits` next. The scan commit limit question is phrased carefully to avoid the word "bug", since at this point nothing has been examined closely enough to know what's a bug fix and what isn't, this number only decides how many commits get that closer look.
 
 ### `.claude/commands/inspect_commits.md`
 
@@ -93,9 +92,21 @@ If anything above is wrong, just run /run_causeway again to start over.
 
 What happens, step by step:
 
-It downloads the repo (or reuses an already-downloaded copy), then fetches from the remote either way, and pins the exact commit the remote's default branch points to right now. It counts how many commits fall inside the time window you chose, as of that pinned commit, without writing anything yet. It shows you that number. It asks how many of those commits should be scanned in detail, being explicit that this is not about bugs yet, just about how many commits are worth a closer look. Once you answer, it writes out a JSON file listing every one of those commits, along with the pinned commit itself, so the run's results are tied to a specific, recorded state of the repo rather than whatever it happens to look like if someone checks again later.
+It downloads the repo (or opens an already-downloaded copy), then lists every remote actually configured there. If there's only one, it just tells you and moves on, nothing to choose. If there's more than one, for example a fork with `origin` pointing at the fork and `upstream` pointing at the original project, it shows you all of them and asks which one to use, rather than guessing.
+
+Once a remote is settled, it fetches from it and lists every branch GitHub reports for that repository, pointing out which one GitHub calls the default, and asks which one you'd like to mine (the default, or any other by name). Only then does it count how many commits fall inside your chosen time window, as of that exact chosen branch, without writing anything yet, and shows you that number. It asks how many of those commits should be scanned in detail, being explicit that this is not about bugs yet, just about how many commits are worth a closer look. Once you answer, it writes out a JSON file listing every one of those commits, along with exactly which remote, branch, and commit were chosen, so the run's results are tied to a specific, recorded state of the repo rather than whatever it happens to look like if someone checks again later.
 
 Example output:
+
+```
+This repo has one remote configured: origin
+(https://github.com/stleary/JSON-java). Using that.
+
+GitHub's default branch for this repo is "master". Which branch
+would you like to mine? (default: master)
+```
+
+You accept the default. Then:
 
 ```
 There are 28 commits in this window. How many of these commits
@@ -105,8 +116,9 @@ should be scanned in detail?
 You answer, say, `6`. Then:
 
 ```
-Repo: stleary/JSON-java (default branch: master)
-Pinned at commit: 4f859fdf3b
+Repo: stleary/JSON-java
+Remote: origin (https://github.com/stleary/JSON-java)
+Branch: master @ 4f859fdf3b
 Window: past 3 months (since 2026-06-05)
 Commits in window: 28
 Scan commit limit: 6
@@ -118,14 +130,14 @@ GitHub PRs/issues and its JGit diff content.
 If anything above is wrong, just run /inspect_repo again to start over.
 ```
 
-The evidence file's `repoSnapshot` records exactly what was pinned:
+The evidence file's `repoSnapshot` records exactly what was chosen:
 
 ```json
 {
-  "defaultBranch": "master",
+  "remoteName": "origin",
+  "branch": "master",
   "remoteHeadSha": "4f859fdf3b5669894c5ed8a305ee5cd5f1fe2b7a",
-  "retrievedAt": "2026-09-11T16:11:14.258592100Z",
-  "usedLocalHeadFallback": false
+  "retrievedAt": "2026-09-11T19:53:25.388268700Z"
 }
 ```
 
@@ -246,10 +258,14 @@ flowchart TD
     GH1 -- "not found, up to 3 tries" --> RC
     GH1 -- "found it" --> IR
 
-    IR["/inspect_repo<br/>download repo, list commits in the window,<br/>ask for a scan commit limit"]
-    RC -- "repo + time window" --> IR
+    IR0["/inspect_repo<br/>download or open the repo,<br/>list its remotes, ask which to use"]
+    RC -- "repo + time window" --> IR0
+    IR1["fetch from chosen remote,<br/>list its branches via GitHub,<br/>ask which branch to mine"]
+    IR0 --> IR1
+    IR["list commits in the window<br/>from the chosen branch,<br/>ask for a scan commit limit"]
+    IR1 --> IR
 
-    EV[["evidence file (JSON)<br/>commit list, plus scan commit limit"]]
+    EV[["evidence file (JSON)<br/>commit list, plus remote/branch/SHA chosen,<br/>plus scan commit limit"]]
     IR --> EV
 
     IC["/inspect_commits<br/>fetch PR/issue context, compute code diffs"]
@@ -277,14 +293,14 @@ flowchart TD
     RESULT[["final file + table for you:<br/>every commit examined, its scores, its verdict"]]
 ```
 
-Reading it top to bottom: `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL. `/inspect_repo` downloads the repo and lists the commits in that window, asking for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file.
+Reading it top to bottom: `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL. `/inspect_repo` downloads or opens the repo, shows you its actual remotes and lets you pick one, then shows you that remote's actual branches (via GitHub) and lets you pick one, then lists the commits in your time window from that exact choice and asks for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file.
 
 ## Running the whole workflow
 
 1. Make sure `.env` exists at the project root with a valid `GITHUB_TOKEN` in it.
 2. Open this project in Claude Code.
 3. Type `/run_causeway` and answer its two questions: the repo URL and the time window.
-4. Type `/inspect_repo`. Answer its question about the scan commit limit once it shows you the commit count.
+4. Type `/inspect_repo`. Confirm or choose the remote if there's more than one, confirm or choose the branch to mine, then answer its question about the scan commit limit once it shows you the commit count.
 5. Type `/inspect_commits` and let it run. No questions this time, it reuses everything from before.
 6. Type `/classify_bugs`. Answer its question about the bug target once it shows you how many commits were scanned, then let it run. This is the step that takes the longest, since it works through commits in groups until it finds enough.
 7. Read the table it prints, and open the final JSON file it mentions if you want the full detail behind every score.

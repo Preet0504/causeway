@@ -1,87 +1,188 @@
 package causeway.mini
 
 import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib.{ObjectId, PersonIdent, Ref, Repository}
+import org.eclipse.jgit.lib.{ObjectId, PersonIdent, Repository}
 import org.eclipse.jgit.revwalk.{RevCommit, RevSort, RevWalk}
 
 import java.io.File
+import java.net.URI
+import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.time.{Instant, LocalDate, ZoneOffset}
+import java.time.{Duration as JDuration, Instant, LocalDate, ZoneOffset}
 import java.util.UUID
 import scala.jdk.CollectionConverters.*
 
-/** Clones (or reuses) a repo, fetches and pins the exact remote HEAD commit
-  * for this run, walks history from that pinned commit, and writes every
-  * commit within a date window to a JSON evidence file. The repo URL alone
-  * does not define repository state, a repo's HEAD moves, so every run
-  * fetches from the remote and records the resolved default branch, the
-  * exact commit SHA it pointed to, and when that was retrieved, in the
-  * evidence file's `repoSnapshot`. Given that recorded snapshot and the same
-  * arguments, which commits are found and their data is deterministic; the
-  * run ID is not, it is a fresh random identifier on every invocation so
-  * repeated runs don't collide on their output file name.
+/** Clones (or reuses) a repo and mines a date window of its commit history.
+  * Nothing about which remote or which branch to use is auto-detected:
+  * a repo URL alone does not define repository state, a clone can have
+  * several remotes (a fork's `origin` and `upstream` point at different
+  * repositories entirely), and a branch other than whatever happens to be
+  * the default may be exactly what's wanted. Every run is explicit about
+  * both, driven by an orchestrator that lists the real options and lets a
+  * person choose, rather than the tool silently picking one. Runs as one
+  * of four modes, selected by `--mode`:
+  *
+  *   - `list-remotes`: clone (or open an existing clone) and print every
+  *     configured remote's name and URL. Nothing is fetched yet.
+  *   - `list-branches --remote-name <name>`: fetch from that remote, look
+  *     up its configured URL, and print every branch GitHub reports for
+  *     that repository, each with its current commit SHA, flagging
+  *     whichever one GitHub calls the default.
+  *   - `count --remote-name <n> --branch-name <n> --branch-sha <sha>
+  *     --since-date <date> --window-label <label>`: a cheap preview of how
+  *     many commits fall in the window from that exact, already-chosen
+  *     commit. Writes nothing.
+  *   - `write` (same arguments as `count`, plus `--scan-commit-limit`):
+  *     writes every commit in the window, plus the chosen repository
+  *     snapshot, to a JSON evidence file.
+  *
+  * The `count` and `write` modes trust the given `--branch-sha` outright,
+  * they do not re-fetch or re-resolve it, since that SHA is the very thing
+  * that was explicitly chosen. Given the same snapshot (the remote, branch,
+  * and SHA actually used) and the same arguments, which commits are found
+  * and their data is deterministic; the run ID is not, it's a fresh random
+  * identifier on every invocation so repeated runs don't collide on their
+  * output file name.
   */
 object InspectRepo:
 
+  private val GitHubApiBase = "https://api.github.com"
+
   def main(args: Array[String]): Unit =
     val opts = parseArgs(args)
-
     val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
-    val sinceDateStr = opts.getOrElse(
-      "since-date",
-      fail("--since-date is required (ISO date, e.g. 2026-06-05)")
-    )
-    val windowLabel = opts.getOrElse("window-label", sinceDateStr)
-    val scanCommitLimit = opts.get("scan-commit-limit").map(_.toInt)
-    val countOnly = opts.get("count-only").contains("true")
-
     val (owner, repo) = parseOwnerRepo(repoUrl)
     val workspaceDir = new File(s"workspace/$owner-$repo")
 
-    val git =
-      if workspaceDir.exists() && new File(workspaceDir, ".git").exists() then
-        System.err.println(s"Reusing existing clone at ${workspaceDir.getPath}")
-        Git.open(workspaceDir)
-      else
-        System.err.println(s"Cloning $repoUrl into ${workspaceDir.getPath} ...")
-        workspaceDir.getParentFile.mkdirs()
-        Git.cloneRepository()
-          .setURI(repoUrl)
-          .setDirectory(workspaceDir)
-          .call()
+    opts.getOrElse("mode", fail("--mode is required (list-remotes, list-branches, count, or write)")) match
+      case "list-remotes"  => runListRemotes(repoUrl, workspaceDir)
+      case "list-branches" => runListBranches(workspaceDir, opts)
+      case "count"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = false)
+      case "write"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = true)
+      case other            => fail(s"Unknown --mode '$other'")
+  end main
 
-    // Always fetch, whether this clone is brand new or reused. A reused
-    // clone's local refs reflect whatever the remote looked like the last
-    // time this tool ran against it, not necessarily now, and the repo URL
-    // alone never tells us that. This is what actually keeps results honest
-    // across separate runs against the same repo on different days.
-    System.err.println(s"Fetching latest from origin ...")
-    git.fetch().setRemote("origin").call()
+  // ---------------------------------------------------------------------
+  // Mode: list-remotes
+  // ---------------------------------------------------------------------
 
+  private def runListRemotes(repoUrl: String, workspaceDir: File): Unit =
+    val git = openOrClone(repoUrl, workspaceDir)
+    val remotes = listConfiguredRemotes(git.getRepository)
+    if remotes.isEmpty then fail(s"Repository at ${workspaceDir.getPath} has no configured remotes")
+    remotes.foreach { case (name, url) => println(s"REMOTE name=$name url=$url") }
+    git.close()
+  end runListRemotes
+
+  /** Every remote configured on this repository, name paired with its URL,
+    * sorted by name for stable output. A fresh clone this tool made itself
+    * always has exactly one ("origin", pointing at exactly the requested
+    * URL); a reused clone could have more (a fork's "origin" and
+    * "upstream" point at different repositories entirely), which is
+    * exactly the ambiguity the orchestrator surfaces to a person to
+    * resolve, rather than the tool silently picking one.
+    */
+  private[mini] def listConfiguredRemotes(repository: Repository): List[(String, String)] =
+    repository.getConfig.getSubsections("remote").asScala.toList.sorted.map { name =>
+      name -> repository.getConfig.getString("remote", name, "url")
+    }
+
+  // ---------------------------------------------------------------------
+  // Mode: list-branches
+  // ---------------------------------------------------------------------
+
+  private def runListBranches(workspaceDir: File, opts: Map[String, String]): Unit =
+    val remoteName = opts.getOrElse("remote-name", fail("--remote-name is required"))
+    if !workspaceDir.exists() then fail(s"No clone at ${workspaceDir.getPath}, run list-remotes first")
+    val git = Git.open(workspaceDir)
     val repository = git.getRepository
-    val retrievedAt = Instant.now()
-    val (remoteHeadSha, defaultBranch, usedFallback) = resolveRemoteHead(repository)
-    if remoteHeadSha == null then
-      fail(s"Repository at ${workspaceDir.getPath} has no resolvable HEAD after fetch")
-    if usedFallback then
-      System.err.println(
-        s"WARNING: could not resolve origin/HEAD after fetch, falling back to local HEAD (${remoteHeadSha.getName}). " +
-          "This may not reflect the actual current remote state."
-      )
-    System.err.println(s"Pinned remote HEAD: $defaultBranch @ ${remoteHeadSha.getName} (retrieved $retrievedAt)")
 
+    val remoteUrl = repository.getConfig.getString("remote", remoteName, "url")
+    if remoteUrl == null then fail(s"No remote named '$remoteName' is configured at ${workspaceDir.getPath}")
+
+    System.err.println(s"Fetching from $remoteName ($remoteUrl) ...")
+    git.fetch().setRemote(remoteName).call()
+    git.close()
+
+    val (remoteOwner, remoteRepo) = parseOwnerRepo(remoteUrl)
+    val defaultBranch = fetchDefaultBranch(remoteOwner, remoteRepo)
+    val branches = fetchBranches(remoteOwner, remoteRepo)
+    if branches.isEmpty then fail(s"GitHub reported no branches for $remoteOwner/$remoteRepo")
+    branches.foreach { case (name, sha) =>
+      println(s"BRANCH name=$name sha=$sha isDefault=${name == defaultBranch}")
+    }
+  end runListBranches
+
+  private def fetchDefaultBranch(owner: String, repo: String): String =
+    val body = httpGet(s"$GitHubApiBase/repos/$owner/$repo")
+    ujson.read(body)("default_branch").str
+
+  private def fetchBranches(owner: String, repo: String): List[(String, String)] =
+    val body = httpGet(s"$GitHubApiBase/repos/$owner/$repo/branches?per_page=100")
+    ujson.read(body).arr.toList.map(b => (b("name").str, b("commit")("sha").str))
+
+  private def httpGet(url: String): String =
+    val client = HttpClient.newBuilder().connectTimeout(JDuration.ofSeconds(15)).build()
+    val request = HttpRequest
+      .newBuilder()
+      .uri(URI.create(url))
+      .header("Accept", "application/vnd.github+json")
+      .timeout(JDuration.ofSeconds(30))
+      .GET()
+      .build()
+    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    if response.statusCode() != 200 then
+      fail(s"GitHub API request to $url failed with status ${response.statusCode()}: ${response.body().take(500)}")
+    response.body()
+
+  // ---------------------------------------------------------------------
+  // Modes: count / write
+  // ---------------------------------------------------------------------
+
+  private def runInspect(
+      repoUrl: String,
+      owner: String,
+      repo: String,
+      workspaceDir: File,
+      opts: Map[String, String],
+      writeEvidence: Boolean
+  ): Unit =
+    val remoteName = opts.getOrElse("remote-name", fail("--remote-name is required"))
+    val branchName = opts.getOrElse("branch-name", fail("--branch-name is required"))
+    val branchSha = opts.getOrElse("branch-sha", fail("--branch-sha is required"))
+    val sinceDateStr = opts.getOrElse("since-date", fail("--since-date is required (ISO date, e.g. 2026-06-05)"))
+    val windowLabel = opts.getOrElse("window-label", sinceDateStr)
+    val scanCommitLimit = opts.get("scan-commit-limit").map(_.toInt)
+
+    if !workspaceDir.exists() then fail(s"No clone at ${workspaceDir.getPath}, run list-remotes first")
+    val git = Git.open(workspaceDir)
+    val repository = git.getRepository
+
+    val startPoint =
+      try ObjectId.fromString(branchSha)
+      catch case e: IllegalArgumentException => fail(s"--branch-sha '$branchSha' is not a valid commit SHA")
+
+    // Deliberately does not fetch or re-resolve here: branchSha is the exact
+    // commit that was already chosen (list-branches already fetched it into
+    // this clone). Re-fetching now could silently move the pin to whatever
+    // is newest at execution time instead of what was actually chosen.
+    try repository.parseCommit(startPoint)
+    catch
+      case e: Exception =>
+        fail(
+          s"Commit $branchSha is not present in the local clone at ${workspaceDir.getPath}. " +
+            "Run list-branches again to re-fetch before retrying."
+        )
+
+    val retrievedAt = Instant.now()
     val sinceEpochSeconds =
       LocalDate.parse(sinceDateStr).atStartOfDay(ZoneOffset.UTC).toInstant.getEpochSecond
+    val windowCommits = findCommitsInWindow(repository, startPoint, sinceEpochSeconds)
 
-    val windowCommits = findCommitsInWindow(repository, remoteHeadSha, sinceEpochSeconds)
-
-    if countOnly then
-      // Preview mode: just report how many commits fall in the window, so the
-      // orchestrator can ask for a scan commit limit informed by that number.
-      // No evidence file is written — nothing here has been decided yet.
+    if !writeEvidence then
       git.close()
       println(s"WINDOW_COMMIT_COUNT=${windowCommits.size}")
-      println(s"REMOTE_HEAD_SHA=${remoteHeadSha.getName}")
     else
       def personObj(p: PersonIdent) =
         ujson.Obj(
@@ -117,10 +218,10 @@ object InspectRepo:
           "sinceDate" -> sinceDateStr
         ),
         "repoSnapshot" -> ujson.Obj(
-          "defaultBranch" -> defaultBranch,
-          "remoteHeadSha" -> remoteHeadSha.getName,
-          "retrievedAt" -> retrievedAt.toString,
-          "usedLocalHeadFallback" -> usedFallback
+          "remoteName" -> remoteName,
+          "branch" -> branchName,
+          "remoteHeadSha" -> branchSha,
+          "retrievedAt" -> retrievedAt.toString
         ),
         "scanCommitLimit" -> scanCommitLimit.map(c => ujson.Num(c.toDouble)).getOrElse(ujson.Null),
         "windowCommitCount" -> windowCommits.size,
@@ -135,40 +236,18 @@ object InspectRepo:
       git.close()
 
       println(s"WINDOW_COMMIT_COUNT=${windowCommits.size}")
-      println(s"REMOTE_HEAD_SHA=${remoteHeadSha.getName}")
       println(s"EVIDENCE_FILE=${outFile.getPath}")
       println(s"RUN_ID=$runId")
-  end main
+  end runInspect
 
-  /** Resolves the pinned starting point for this run: the SHA that the
-    * remote's default branch points to right now (as of the most recent
-    * fetch), plus that branch's name. Later operations must walk from this
-    * returned SHA, not from local `HEAD`, local `HEAD` is not refreshed by
-    * a plain fetch at all (fetch only updates remote-tracking refs), so
-    * using it here would silently reproduce the exact staleness bug this
-    * function exists to fix.
-    *
-    * Deliberately does not rely on `refs/remotes/origin/HEAD`: that
-    * symbolic ref is not reliably present (JGit's CloneCommand does not
-    * always set it up the way plain `git clone` does). Instead, uses
-    * `repository.getBranch()` for the branch name, this reads the locally
-    * checked-out branch from `.git/HEAD` and is unaffected by fetches, so
-    * it stays a stable label across reused clones, then looks up
-    * `refs/remotes/origin/<that branch>`, which a plain fetch does reliably
-    * update per Git's default fetch refspec, for the current SHA.
-    *
-    * Returns (the resolved commit id, or null if nothing resolves; branch
-    * label; whether the last-resort local `HEAD` fallback was used, which
-    * only happens if the remote-tracking ref itself is missing).
-    */
-  private[mini] def resolveRemoteHead(repository: Repository): (ObjectId, String, Boolean) =
-    val branchName = repository.getBranch
-    val remoteTrackingRef: Ref = repository.getRefDatabase.findRef(s"refs/remotes/origin/$branchName")
-    if remoteTrackingRef != null && remoteTrackingRef.getObjectId != null then
-      (remoteTrackingRef.getObjectId, branchName, false)
+  private def openOrClone(repoUrl: String, workspaceDir: File): Git =
+    if workspaceDir.exists() && new File(workspaceDir, ".git").exists() then
+      System.err.println(s"Reusing existing clone at ${workspaceDir.getPath}")
+      Git.open(workspaceDir)
     else
-      val fallback = repository.resolve("HEAD")
-      if fallback == null then (null, branchName, true) else (fallback, branchName, true)
+      System.err.println(s"Cloning $repoUrl into ${workspaceDir.getPath} ...")
+      workspaceDir.getParentFile.mkdirs()
+      Git.cloneRepository().setURI(repoUrl).setDirectory(workspaceDir).call()
 
   /** Every commit reachable from `startPoint` whose commit time is at or
     * after `sinceEpochSeconds`, newest first. Does not stop early: Git
