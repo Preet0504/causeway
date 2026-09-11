@@ -49,7 +49,12 @@ object InspectRepo:
 
   private val GitHubApiBase = "https://api.github.com"
 
-  def main(args: Array[String]): Unit =
+  /** Entry point for the `inspect-repo` subcommand of the unified `Causeway`
+    * CLI (see `Causeway.scala`). Not a JVM `main` itself, `Causeway` is the
+    * only actual entry point now, this is called with the subcommand's own
+    * argument list already stripped of the subcommand name itself.
+    */
+  def run(args: Array[String]): Unit =
     val opts = parseArgs(args)
     val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
     val (owner, repo) = parseOwnerRepo(repoUrl)
@@ -61,7 +66,7 @@ object InspectRepo:
       case "count"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = false)
       case "write"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = true)
       case other            => fail(s"Unknown --mode '$other'")
-  end main
+  end run
 
   // ---------------------------------------------------------------------
   // Mode: list-remotes

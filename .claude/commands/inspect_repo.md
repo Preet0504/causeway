@@ -18,7 +18,7 @@ Otherwise, gather them the same way `/run_causeway` does:
 Run:
 
 ```bash
-sbt -batch "runMain causeway.mini.InspectRepo --repo-url <repo-url> --mode list-remotes"
+tools/causeway inspect-repo --repo-url <repo-url> --mode list-remotes
 ```
 
 This clones the repo (or opens an existing clone already on disk) and prints one `REMOTE name=<name> url=<url>` line per remote configured there. A fresh clone always has exactly one (`origin`, pointing at exactly the URL given); a reused directory could have more, for example a fork's `origin` pointing at the fork and `upstream` pointing at the original repository, or a directory that turns out to be a clone of something else entirely.
@@ -35,7 +35,7 @@ If the command fails, report the failure plainly and stop.
 Run:
 
 ```bash
-sbt -batch "runMain causeway.mini.InspectRepo --repo-url <repo-url> --mode list-branches --remote-name <chosen-remote>"
+tools/causeway inspect-repo --repo-url <repo-url> --mode list-branches --remote-name <chosen-remote>
 ```
 
 This fetches from the chosen remote and prints one `BRANCH name=<name> sha=<sha> isDefault=<true|false>` line per branch GitHub reports for that repository.
@@ -59,7 +59,7 @@ Also produce a filesystem-safe slug of the window label: lowercase, spaces repla
 ## 5. Preview the commit count
 
 ```bash
-sbt -batch "runMain causeway.mini.InspectRepo --repo-url <repo-url> --mode count --remote-name <chosen-remote> --branch-name <chosen-branch> --branch-sha <chosen-branch-sha> --since-date <iso-date> --window-label <slug>"
+tools/causeway inspect-repo --repo-url <repo-url> --mode count --remote-name <chosen-remote> --branch-name <chosen-branch> --branch-sha <chosen-branch-sha> --since-date <iso-date> --window-label <slug>
 ```
 
 This is a cheap preview from the exact commit already chosen in step 3, it writes nothing. Read `WINDOW_COMMIT_COUNT` from stdout.
@@ -73,7 +73,7 @@ Tell the user how many commits fall within the chosen window (the `WINDOW_COMMIT
 ## 7. Extract and write the evidence file
 
 ```bash
-sbt -batch "runMain causeway.mini.InspectRepo --repo-url <repo-url> --mode write --remote-name <chosen-remote> --branch-name <chosen-branch> --branch-sha <chosen-branch-sha> --since-date <iso-date> --window-label <slug> --scan-commit-limit <limit>"
+tools/causeway inspect-repo --repo-url <repo-url> --mode write --remote-name <chosen-remote> --branch-name <chosen-branch> --branch-sha <chosen-branch-sha> --since-date <iso-date> --window-label <slug> --scan-commit-limit <limit>
 ```
 
 This does not fetch again, it trusts the exact commit already chosen in step 3. It writes every commit within the window, full commit message, author, committer, dates, parent SHAs, plus the chosen remote, branch, SHA, and the scan commit limit, to a JSON evidence file under `workspace/exports/`.
@@ -85,7 +85,7 @@ Read the tool's stdout for:
 
 If the command fails, or doesn't print an `EVIDENCE_FILE` line, report the failure plainly to the user, don't claim success.
 
-If the tool behaves unexpectedly right after a code change to it, the sbt background server may be stale, run `sbt -batch shutdown` once, then retry.
+`tools/causeway` rebuilds automatically the first time it's run after a source change (you'll see "source changed, rebuilding ..." on stderr), every other invocation runs the already-compiled code directly with no sbt involved. If something still behaves unexpectedly right after a code change, delete `target/causeway-classpath.txt` to force a fresh rebuild on the next call.
 
 ## 8. Final report
 

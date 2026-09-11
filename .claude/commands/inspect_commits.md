@@ -24,7 +24,7 @@ set -a && . ./.env && set +a
 From the repository root:
 
 ```bash
-sbt -batch "runMain causeway.mini.EnrichCommits --evidence-file <path-to-evidence-file>"
+tools/causeway inspect-commits --evidence-file <path-to-evidence-file>
 ```
 
 This does two things, both bounded by the evidence file's own `scanCommitLimit` (only that many of the window's commits, the most recent ones, get enriched; if `scanCommitLimit` is null, every window commit is enriched):
@@ -38,7 +38,7 @@ Read the tool's stdout for:
 
 If the command fails, or doesn't print an `ENRICHED_FILE` line, report the failure plainly — don't guess at numbers or claim success. A GraphQL request that fails for one batch is logged as a warning to stderr and that batch's commits simply get no PR/issue data (empty list) rather than aborting the whole run — mention this if you see such a warning.
 
-If the tool behaves unexpectedly right after a code change to it, the sbt background server may be stale — run `sbt -batch shutdown` once, then retry.
+`tools/causeway` rebuilds automatically the first time it's run after a source change, every other invocation runs the already-compiled code directly with no sbt involved. If something still behaves unexpectedly right after a code change, delete `target/causeway-classpath.txt` to force a fresh rebuild on the next call.
 
 ## 4. Final report
 

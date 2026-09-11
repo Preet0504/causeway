@@ -16,6 +16,7 @@ Everything is run through a handful of chat commands, typed one after another, e
 - **GitHub GraphQL API**: used to fetch the pull requests and issues linked to a commit, straight from GitHub, rather than guessing from the commit message alone.
 - **upickle/ujson**: a small library for reading and writing the JSON files this project passes between its stages.
 - **Claude Code commands and subagents**: the chat commands (`/run_causeway`, etc.) and the AI reviewers are plain instruction files that Claude Code reads and follows, no extra framework needed.
+- **The `causeway` CLI**: a small launcher script that runs the compiled Scala tools directly, no `sbt` involved at invocation time. sbt is still what compiles the code, the launcher just stops the chat commands from needing to go through sbt's build-tool machinery on every single call.
 
 ## Code files, and what they actually do
 
@@ -23,9 +24,17 @@ Everything is run through a handful of chat commands, typed one after another, e
 
 These two files are the project's setup. `build.sbt` says this is a Scala 3 project, lists the two outside libraries it needs (JGit and upickle), and turns on a compiler warning flag. `project/build.properties` pins the exact version of sbt to use, so the build behaves the same on any machine.
 
+### `src/main/scala/causeway/mini/Causeway.scala`
+
+The single compiled entry point for everything. Rather than each tool having its own `main` (which is how `sbt runMain causeway.mini.InspectRepo` used to work, and why sbt kept complaining about "multiple main classes"), this is the only class with a real `main`, and it dispatches on the first argument, `inspect-repo`, `inspect-commits`, to that capability's own logic. Adding a new capability later means adding one case here, the capability itself doesn't need to know it's part of a CLI.
+
+### `tools/causeway`
+
+The launcher script the chat commands actually call: `tools/causeway inspect-repo --mode list-remotes ...`. It runs `java` directly against already-compiled classes and a cached classpath, no `sbt` involved. The first time it's run after a source file or `build.sbt` changes, it notices (by comparing file timestamps against its cache), recompiles once, and refreshes the cache automatically, every other invocation just runs, typically under a second of pure JVM startup instead of sbt's several-second build-server round trip.
+
 ### `src/main/scala/causeway/mini/InspectRepo.scala`
 
-This is the tool behind `/inspect_repo`. It doesn't auto-detect which remote or which branch to use, a repo URL alone doesn't define that, a clone can have more than one remote (a fork's `origin` pointing at the fork, `upstream` at the original), and the "default" branch isn't necessarily the one worth mining. Instead it runs as one of four modes, each a separate invocation, so the orchestrator can show real options to the user between them:
+This is the tool behind the `inspect-repo` subcommand. It doesn't auto-detect which remote or which branch to use, a repo URL alone doesn't define that, a clone can have more than one remote (a fork's `origin` pointing at the fork, `upstream` at the original), and the "default" branch isn't necessarily the one worth mining. Instead it runs as one of four modes, each a separate invocation, so the orchestrator can show real options to the user between them:
 
 1. **`list-remotes`**: downloads the repo with JGit if it hasn't already been downloaded, or opens the existing copy if it has, then prints every remote actually configured there, name and URL. Nothing is fetched yet.
 2. **`list-branches`**, given a chosen remote name: fetches from that remote (a repo's default branch moves, so a reused local copy would otherwise silently serve whatever it looked like last time this tool touched it), reads that remote's own configured URL, and asks GitHub's REST API for every branch on that repository, each with its current commit SHA, flagging whichever one GitHub calls the default.
@@ -36,7 +45,7 @@ This is the tool behind `/inspect_repo`. It doesn't auto-detect which remote or 
 
 ### `src/main/scala/causeway/mini/EnrichCommits.scala`
 
-This is the tool behind `/inspect_commits`. Internally it:
+This is the tool behind the `inspect-commits` subcommand. Internally it:
 
 1. Reads the JSON file that `InspectRepo` produced.
 2. Takes only as many commits as the scan commit limit allows (the most recent ones).

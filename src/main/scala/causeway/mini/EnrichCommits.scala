@@ -29,7 +29,11 @@ object EnrichCommits:
   private val GraphqlBatchSize = 20
   private val DiffThreadCount = 8
 
-  def main(args: Array[String]): Unit =
+  /** Entry point for the `inspect-commits` subcommand of the unified
+    * `Causeway` CLI (see `Causeway.scala`). Not a JVM `main` itself,
+    * `Causeway` is the only actual entry point now.
+    */
+  def run(args: Array[String]): Unit =
     val opts = parseArgs(args)
     val evidencePath = opts.getOrElse("evidence-file", fail("--evidence-file is required"))
     val token = sys.env.getOrElse("GITHUB_TOKEN", fail("GITHUB_TOKEN environment variable is required")).trim
@@ -114,7 +118,7 @@ object EnrichCommits:
     // is done. Force a clean exit rather than rely on every thread pool
     // involved being daemon by default.
     sys.exit(0)
-  end main
+  end run
 
   private def emptyDiff: ujson.Value =
     ujson.Obj("isMergeCommit" -> false, "parentSha" -> ujson.Null, "files" -> ujson.Arr())

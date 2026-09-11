@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Causeway Mini's unified CLI launcher.
+#
+# Usage: tools/causeway <subcommand> [args...]
+#
+# Runs the compiled Causeway entry point directly via `java`, with no sbt
+# involved at invocation time. sbt is a build tool, exactly right for
+# active development, but the wrong layer for something invoked repeatedly
+# that needs to behave predictably: fixed startup cost, fixed output, no
+# build-server state to go stale. This script rebuilds and refreshes its
+# cached classpath automatically, but only when a source file or build.sbt
+# has actually changed since the cache was last written, sbt runs once per
+# real change, never on every invocation.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+CLASSES_DIR="target/out/jvm/scala-3.3.6/causeway-mini/classes"
+CACHE_FILE="target/causeway-classpath.txt"
+
+stale=0
+if [ ! -f "$CACHE_FILE" ] || [ ! -d "$CLASSES_DIR" ]; then
+  stale=1
+else
+  newer="$(find src build.sbt -newer "$CACHE_FILE" 2>/dev/null || true)"
+  if [ -n "$newer" ]; then
+    stale=1
+  fi
+fi
+
+if [ "$stale" -eq 1 ]; then
+  echo "tools/causeway: source changed, rebuilding ..." >&2
+  export PATH="$HOME/scoop/shims:$PATH"
+  sbt -batch "compile" >&2
+
+  deps_raw="$(sbt -batch "export Compile/dependencyClasspath" 2>/dev/null | grep -m1 '^List(')"
+  deps_raw="${deps_raw#List(}"
+  deps_raw="${deps_raw%)}"
+  # java.exe is a native Windows binary and cannot resolve MSYS-style
+  # /c/Users/... paths embedded in an argfile (Git Bash only translates
+  # paths passed as literal command-line arguments, not file contents), so
+  # convert the Coursier cache root to a real Windows path first.
+  csr_cache="$(cygpath -w "$HOME/AppData/Local/Coursier/Cache/v1" 2>/dev/null || echo "$HOME/AppData/Local/Coursier/Cache/v1")"
+  deps_raw="${deps_raw//\$\{CSR_CACHE\}/$csr_cache}"
+  deps_raw="${deps_raw//, /;}"
+
+  mkdir -p "$(dirname "$CACHE_FILE")"
+  {
+    echo "-cp"
+    echo "$CLASSES_DIR;$deps_raw"
+  } > "$CACHE_FILE"
+  echo "tools/causeway: classpath cache refreshed" >&2
+fi
+
+exec java "@$CACHE_FILE" causeway.mini.Causeway "$@"
