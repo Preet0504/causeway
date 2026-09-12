@@ -43,14 +43,24 @@ Render a markdown table, one row per commit you actually examined (not commits y
 ## 6. Write the final JSON file
 
 Write a new file next to the enriched evidence file (same directory, same base name with `_enriched` replaced by `_classified`, e.g. `run_<id>_classified.json`), containing:
-- The same top-level repo/window/repoSnapshot/scanCommitLimit fields as the enriched file, carried over
+- The same top-level `runId`/repo/window/repoSnapshot/scanCommitLimit fields as the enriched file, carried over exactly as-is (`runId` in particular must be carried forward unchanged, it's how this run gets linked back to its `/inspect_commits` and `/inspect_repo` runs later)
 - `bugTarget`
 - `examinedCommitCount` (how many commits you actually classified before stopping)
 - `scannedCommitCount` (the evidence file's `enrichedCommitCount`, for comparison)
 - `stoppedEarly` (true if you stopped before working through every batch)
 - A `classifications` array, one entry per examined commit: `sha`, `shortMessage`, `messageScore`, `messageExplanation`, `diffScore`, `diffExplanation`, `prScore`, `prExplanation`, `verdict` (boolean), `verdictRationale`, `countsTowardTarget` (boolean, true only for the accepted bug fixes up to the target)
 
-## 7. Final report
+## 7. Store the classifications in the SQLite catalog
+
+```bash
+tools/causeway store --file <classified-file>
+```
+
+This upserts this run and every examined commit's classification into `workspace/causeway.db`, linked back to the `/inspect_commits` run via the shared `runId`.
+
+If this fails, report it plainly but don't treat it as blocking, the classified file itself is still valid and is Causeway Mini's final output.
+
+## 8. Final report
 
 After the table, state plainly:
 - How many commits you examined, out of how many were available to scan

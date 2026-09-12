@@ -87,7 +87,17 @@ If the command fails, or doesn't print an `EVIDENCE_FILE` line, report the failu
 
 `tools/causeway` rebuilds automatically the first time it's run after a source change (you'll see "source changed, rebuilding ..." on stderr), every other invocation runs the already-compiled code directly with no sbt involved. If something still behaves unexpectedly right after a code change, delete `target/causeway-classpath.txt` to force a fresh rebuild on the next call.
 
-## 8. Final report
+## 8. Store the evidence in the SQLite catalog
+
+```bash
+tools/causeway store --file <evidence-file>
+```
+
+This upserts the repository, its snapshot, this run, and every window commit into `workspace/causeway.db`, alongside the JSON file (the catalog is additive, it doesn't replace the JSON files later commands read). Running this or any earlier step again, for the same repo and window, updates existing rows rather than duplicating them.
+
+If this fails, report it plainly but don't treat it as blocking, the evidence file itself is still valid and `/inspect_commits` only reads that.
+
+## 9. Final report
 
 Produce one final message stating, plainly:
 - The repo (`owner/repo`)

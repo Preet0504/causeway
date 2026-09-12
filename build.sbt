@@ -7,6 +7,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "org.eclipse.jgit" % "org.eclipse.jgit" % "7.3.0.202506031305-r",
       "com.lihaoyi" %% "upickle" % "4.1.0",
+      "org.xerial" % "sqlite-jdbc" % "3.49.1.0",
       "org.scalameta" %% "munit" % "1.1.1" % Test
     ),
     testFrameworks += new TestFramework("munit.Framework")

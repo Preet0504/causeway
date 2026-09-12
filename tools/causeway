@@ -33,6 +33,7 @@ if [ "$stale" -eq 1 ]; then
   echo "tools/causeway: source changed, rebuilding ..." >&2
   export PATH="$HOME/scoop/shims:$PATH"
   sbt -batch "compile" >&2
+  sbt -batch "Compile/copyResources" >&2
 
   deps_raw="$(sbt -batch "export Compile/dependencyClasspath" 2>/dev/null | grep -m1 '^List(')"
   deps_raw="${deps_raw#List(}"

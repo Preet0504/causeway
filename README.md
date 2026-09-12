@@ -15,6 +15,7 @@ Everything is run through a handful of chat commands, typed one after another, e
 - **JGit**: a library that lets the Scala code read a git repository's history and compute diffs directly, without needing the `git` command line tool installed separately.
 - **GitHub GraphQL API**: used to fetch the pull requests and issues linked to a commit, straight from GitHub, rather than guessing from the commit message alone.
 - **upickle/ujson**: a small library for reading and writing the JSON files this project passes between its stages.
+- **SQLite (via the `sqlite-jdbc` driver)**: a repository catalog, `workspace/causeway.db`, that every stage's JSON output also gets stored into, so the data can be queried directly (which commits, across every run ever done, are linked to a given issue?) instead of only ever being read one JSON file at a time.
 - **Claude Code commands and subagents**: the chat commands (`/run_causeway`, etc.) and the AI reviewers are plain instruction files that Claude Code reads and follows, no extra framework needed.
 - **The `causeway` CLI**: a small launcher script that runs the compiled Scala tools directly, no `sbt` involved at invocation time. sbt is still what compiles the code, the launcher just stops the chat commands from needing to go through sbt's build-tool machinery on every single call.
 
@@ -26,7 +27,7 @@ These two files are the project's setup. `build.sbt` says this is a Scala 3 proj
 
 ### `src/main/scala/causeway/mini/Causeway.scala`
 
-The single compiled entry point for everything. Rather than each tool having its own `main` (which is how `sbt runMain causeway.mini.InspectRepo` used to work, and why sbt kept complaining about "multiple main classes"), this is the only class with a real `main`, and it dispatches on the first argument, `inspect-repo`, `inspect-commits`, to that capability's own logic. Adding a new capability later means adding one case here, the capability itself doesn't need to know it's part of a CLI.
+The single compiled entry point for everything. Rather than each tool having its own `main` (which is how `sbt runMain causeway.mini.InspectRepo` used to work, and why sbt kept complaining about "multiple main classes"), this is the only class with a real `main`, and it dispatches on the first argument, `inspect-repo`, `inspect-commits`, `store`, to that capability's own logic. Adding a new capability later means adding one case here, the capability itself doesn't need to know it's part of a CLI.
 
 ### `tools/causeway`
 
@@ -54,21 +55,29 @@ This is the tool behind the `inspect-commits` subcommand. Internally it:
 5. Skips the code comparison for merge commits, since a merge doesn't have one clean "before and after" to point to.
 6. Combines all of this into a new JSON file, leaving the original file from step 2 untouched.
 
+### `src/main/resources/schema.sql`
+
+The SQLite schema for the repository catalog: repositories, repository snapshots, one run table per pipeline stage (`inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`), commits, commit parents, a `run_commits` join table, pull requests, issues, issue-commit relations, and bug classifications, plus three empty stub tables (`test_observations`, `materialized_revisions`, `build_runs`) reserved for capabilities that don't exist yet. Every table with a natural key (a repo's `owner`+`repo`, a run's `run_id`, a commit's `sha`) is meant to be upserted into, never plain-inserted.
+
+### `src/main/scala/causeway/mini/Store.scala`
+
+This is the tool behind the `store` subcommand. It takes any one JSON file any of the three pipeline stages produced, figures out which of the three it is by which fields are present (no separate flag needed), and upserts its contents into `workspace/causeway.db`. Storing the same file twice, or storing two different runs against the same repository, updates or reuses existing rows rather than creating duplicates, one run mining the same repo with a different time window than an earlier run doesn't get merged with it or corrupt it, both runs' results sit side by side, sharing only the one `repositories` row underneath. This is additive alongside the JSON files, not a replacement for them, `/inspect_commits` and `/classify_bugs` still read the previous stage's JSON file directly and in full.
+
 ### `.claude/commands/run_causeway.md`
 
 Plain instructions for Claude to follow, not code. They say: ask the user for a repo URL, check it against GitHub directly, ask again (up to 3 times) if it isn't found, explain what a time window means, ask the user to choose one, and then point them to `/inspect_repo` next. It deliberately does not ask about limits or targets, those come later once there's something concrete to base them on.
 
 ### `.claude/commands/inspect_repo.md`
 
-Instructions that say: reuse the repo and time window from the previous command if they're already known, list the repo's configured remotes and let the user choose one (skipping the question if there's genuinely only one), list that remote's branches via GitHub and let the user choose one (the actual default branch is suggested), turn the chosen time window into an actual date, run the Scala tool once in preview mode to get a count, tell the user that count and ask for a scan commit limit, run the tool again for real, and point them to `/inspect_commits` next. The scan commit limit question is phrased carefully to avoid the word "bug", since at this point nothing has been examined closely enough to know what's a bug fix and what isn't, this number only decides how many commits get that closer look.
+Instructions that say: reuse the repo and time window from the previous command if they're already known, list the repo's configured remotes and let the user choose one (skipping the question if there's genuinely only one), list that remote's branches via GitHub and let the user choose one (the actual default branch is suggested), turn the chosen time window into an actual date, run the Scala tool once in preview mode to get a count, tell the user that count and ask for a scan commit limit, run the tool again for real, store the resulting evidence file into the SQLite catalog, and point them to `/inspect_commits` next. The scan commit limit question is phrased carefully to avoid the word "bug", since at this point nothing has been examined closely enough to know what's a bug fix and what isn't, this number only decides how many commits get that closer look.
 
 ### `.claude/commands/inspect_commits.md`
 
-Instructions that say: find the JSON file from the previous step, make sure the GitHub access token is loaded from `.env`, run the enrichment tool, show a few example results, and point the user to `/classify_bugs` next.
+Instructions that say: find the JSON file from the previous step, make sure the GitHub access token is loaded from `.env`, run the enrichment tool, store the resulting enriched file into the SQLite catalog, show a few example results, and point the user to `/classify_bugs` next.
 
 ### `.claude/commands/classify_bugs.md`
 
-Instructions that say: find the enriched JSON file, ask the user how many genuine bug fixes they want to find (the bug target), then work through the commits in groups of 5, one group at a time, sending each group to its own AI reviewer and judging the results as they come back. It stops as soon as enough genuine bug fixes have been found, or once every group has been checked, whichever comes first. It shows the user a table, and writes one final JSON file with everything in it.
+Instructions that say: find the enriched JSON file, ask the user how many genuine bug fixes they want to find (the bug target), then work through the commits in groups of 5, one group at a time, sending each group to its own AI reviewer and judging the results as they come back. It stops as soon as enough genuine bug fixes have been found, or once every group has been checked, whichever comes first. It shows the user a table, writes one final JSON file with everything in it, and stores that file into the SQLite catalog too.
 
 ### `.claude/agents/bug-classifier.md`
 
@@ -257,6 +266,23 @@ command yet.
 If anything above is wrong, just run /classify_bugs again to start over.
 ```
 
+## The SQLite catalog
+
+Every command above, after writing its own JSON file, also stores that file's contents into `workspace/causeway.db`. This happens automatically, there's nothing extra to type. It's additive: the JSON files are still what each command actually reads from the step before it, the database exists so the data can also be queried directly, across every run that's ever been done, rather than only ever being read one JSON file at a time.
+
+Repeating a step (say, re-running `/inspect_repo` for the same repo and window) updates the existing rows rather than creating duplicates. Mining the same repo again with a *different* window creates a second, separate run, but both runs still share the one row for the repository itself, and a commit rediscovered by both runs is still just one row in `commits`, linked to both runs.
+
+For example, after running the full pipeline once, this finds every genuine bug fix found so far, across every classification run, with its linked issue:
+
+```sql
+SELECT c.sha, c.short_message, i.title AS issue_title, bc.verdict_rationale
+FROM bug_classifications bc
+JOIN commits c ON c.sha = bc.commit_sha
+LEFT JOIN issue_commit_relations icr ON icr.commit_sha = c.sha
+LEFT JOIN issues i ON i.id = icr.issue_id
+WHERE bc.verdict = 1;
+```
+
 ## How it all fits together
 
 ```mermaid
@@ -276,6 +302,8 @@ flowchart TD
 
     EV[["evidence file (JSON)<br/>commit list, plus remote/branch/SHA chosen,<br/>plus scan commit limit"]]
     IR --> EV
+    DB[(workspace/causeway.db)]
+    EV -. "store" .-> DB
 
     IC["/inspect_commits<br/>fetch PR/issue context, compute code diffs"]
     EV --> IC
@@ -284,6 +312,7 @@ flowchart TD
 
     EN[["enriched file (JSON)<br/>+ linked PRs/issues, + code diffs"]]
     IC --> EN
+    EN -. "store" .-> DB
 
     CB["/classify_bugs<br/>ask: how many bug fixes to find? (bug target)"]
     EN --> CB
@@ -300,9 +329,10 @@ flowchart TD
     CHECK -- "yes" --> RESULT
 
     RESULT[["final file + table for you:<br/>every commit examined, its scores, its verdict"]]
+    RESULT -. "store" .-> DB
 ```
 
-Reading it top to bottom: `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL. `/inspect_repo` downloads or opens the repo, shows you its actual remotes and lets you pick one, then shows you that remote's actual branches (via GitHub) and lets you pick one, then lists the commits in your time window from that exact choice and asks for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file.
+Reading it top to bottom: `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL. `/inspect_repo` downloads or opens the repo, shows you its actual remotes and lets you pick one, then shows you that remote's actual branches (via GitHub) and lets you pick one, then lists the commits in your time window from that exact choice and asks for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file. Each of the three JSON files (dashed arrows above) also gets stored into the SQLite catalog as it's produced, so the data ends up queryable directly, not just readable one file at a time.
 
 ## Running the whole workflow
 
@@ -314,3 +344,4 @@ Reading it top to bottom: `/run_causeway` gets your repo and time window, checki
 6. Type `/classify_bugs`. Answer its question about the bug target once it shows you how many commits were scanned, then let it run. This is the step that takes the longest, since it works through commits in groups until it finds enough.
 7. Read the table it prints, and open the final JSON file it mentions if you want the full detail behind every score.
 8. If any step's result looks wrong, just run that same command again to redo it.
+9. Everything that was written to a JSON file along the way is also sitting in `workspace/causeway.db`, queryable directly with any SQLite client, if you'd rather look at the data that way than open the JSON files one at a time.

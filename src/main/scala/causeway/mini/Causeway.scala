@@ -26,6 +26,7 @@ object Causeway:
     subcommand match
       case "inspect-repo"     => InspectRepo.run(rest)
       case "inspect-commits"  => EnrichCommits.run(rest)
+      case "store"            => Store.run(rest)
       case "-h" | "--help"    => println(usage)
       case other              => fail(s"Unknown subcommand '$other'.\n\n$usage")
 
@@ -36,6 +37,7 @@ object Causeway:
       |  inspect-repo      Discover a repo's remotes/branches and extract a commit window as evidence.
       |                    Modes: --mode list-remotes | list-branches | count | write
       |  inspect-commits   Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
+      |  store             Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
       |""".stripMargin
 
   private def fail(msg: String): Nothing =

@@ -40,7 +40,17 @@ If the command fails, or doesn't print an `ENRICHED_FILE` line, report the failu
 
 `tools/causeway` rebuilds automatically the first time it's run after a source change, every other invocation runs the already-compiled code directly with no sbt involved. If something still behaves unexpectedly right after a code change, delete `target/causeway-classpath.txt` to force a fresh rebuild on the next call.
 
-## 4. Final report
+## 4. Store the enrichment in the SQLite catalog
+
+```bash
+tools/causeway store --file <enriched-file>
+```
+
+This upserts this run, plus every enriched commit's PRs, issues, and issue-commit links, into `workspace/causeway.db`, linked back to the `/inspect_repo` run that discovered these commits via the shared `runId`. It won't overwrite the author/committer data already stored for these commits (the enriched file doesn't carry that data itself).
+
+If this fails, report it plainly but don't treat it as blocking, the enriched file itself is still valid and `/classify_bugs` only reads that.
+
+## 5. Final report
 
 Produce one final message stating, plainly:
 - How many commits were enriched, out of how many were in the window
