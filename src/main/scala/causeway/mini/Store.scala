@@ -165,6 +165,8 @@ object Store:
       sourceFile = filePath
     )
 
+    val knownShas = json("commits").arr.map(_("sha").str).toSet
+
     json("commits").arr.foreach { c =>
       val sha = c("sha").str
       // Enriched commits carry no author/committer data (EnrichCommits
@@ -196,8 +198,37 @@ object Store:
           state = Some(pr("state").str),
           firstSeenInspectCommitsRunId = Some(inspectCommitsRunId)
         )
-        // The commit genuinely belongs to this PR, that's a per-commit fact.
-        upsertRelation(conn, "commit_belongs_to_pr", commitSha = Some(sha), pullRequestId = Some(prId), issueId = None, evidence = None, inspectCommitsRunId)
+        // GitHub's own resolution of "which PR(s) is this commit associated
+        // with" (Commit.associatedPullRequests). Kept distinct from
+        // pr_contains_commit below: a commit can be resolved as associated
+        // with a PR by GitHub while no longer appearing in that PR's own
+        // commit list (a rebase or force-push can drop it), these are two
+        // separately-sourced facts that can disagree, not one.
+        upsertRelation(
+          conn,
+          "commit_associated_pr",
+          commitSha = Some(sha),
+          pullRequestId = Some(prId),
+          issueId = None,
+          evidence = Some("Commit.associatedPullRequests"),
+          inspectCommitsRunId
+        )
+
+        // Whether this exact commit sha actually appears in the PR's own
+        // commit list (up to the first 100), a fact fetched independently
+        // of associatedPullRequests.
+        val prCommitShas = pr.obj.get("commitShas").map(_.arr.toList.map(_.str)).getOrElse(Nil)
+        val prCommitTotalCount = pr.obj.get("commitTotalCount").map(_.num.toInt).getOrElse(prCommitShas.size)
+        if prCommitShas.contains(sha) then
+          upsertRelation(
+            conn,
+            "pr_contains_commit",
+            commitSha = Some(sha),
+            pullRequestId = Some(prId),
+            issueId = None,
+            evidence = Some(s"found in PullRequest.commits (PR has $prCommitTotalCount commits)"),
+            inspectCommitsRunId
+          )
 
         pr("closingIssues").arr.foreach { issue =>
           val issueId = upsertIssue(
@@ -214,25 +245,91 @@ object Store:
           // issue), so this edge is recorded between the PR and the issue,
           // with no commit_sha, rather than attributed to every commit
           // that happens to belong to this PR.
-          upsertRelation(conn, "pr_closes_issue", commitSha = None, pullRequestId = Some(prId), issueId = Some(issueId), evidence = None, inspectCommitsRunId)
+          upsertRelation(
+            conn,
+            "pr_closes_issue",
+            commitSha = None,
+            pullRequestId = Some(prId),
+            issueId = Some(issueId),
+            evidence = Some("PullRequest.closingIssuesReferences"),
+            inspectCommitsRunId
+          )
         }
       }
 
       // A raw `#123`-shaped mention in the commit's own message, distinct
-      // from GitHub's own authoritative issue-mention tracking (not fetched
-      // yet): this is an unconfirmed text match, it doesn't know whether
-      // #123 is really an issue or a PR in this repo (a merge commit's
-      // auto-generated "Merge pull request #1072" message will match its
-      // own PR number here too), which is exactly why it's kept as its own
-      // weaker relation type rather than folded into a stronger one.
+      // from GitHub's own authoritative issue-mention tracking (see
+      // commit_mentions_issue below): this is an unconfirmed text match, it
+      // doesn't know whether #123 is really an issue or a PR in this repo
+      // (a merge commit's auto-generated "Merge pull request #1072"
+      // message will match its own PR number here too), which is exactly
+      // why it's kept as its own weaker relation type rather than folded
+      // into a stronger one.
       IssueNumberMention.findAllMatchIn(c("fullMessage").str).map(_.group(1).toInt).distinct.foreach { number =>
         val issueId = upsertIssue(conn, repoId, number, title = None, url = None, firstSeenInspectCommitsRunId = Some(inspectCommitsRunId))
         upsertRelation(conn, "commit_message_references_issue", commitSha = Some(sha), pullRequestId = None, issueId = Some(issueId), evidence = Some(s"#$number"), inspectCommitsRunId)
       }
     }
+
+    // Everything below comes from the issue's own side (its timeline, its
+    // body text), not from walking commit -> PR -> issue, established by
+    // EnrichCommits.fetchIssueTimelines. Older enriched files (before this
+    // was added) simply won't have this key, hence the `.obj.get`.
+    json.obj.get("issueTimelines").foreach(_.arr.foreach { timeline =>
+      val issueId = upsertIssue(conn, repoId, timeline("number").num.toInt, title = None, url = None, firstSeenInspectCommitsRunId = Some(inspectCommitsRunId))
+
+      // GitHub's own ReferencedEvent: a commit's message mentioned this
+      // issue, confirmed by GitHub itself, a stronger signal than the raw
+      // #N text match above. Only recorded for commits this run actually
+      // knows about (has a `commits` row for), a referenced commit outside
+      // the scanned set can't be linked without violating the foreign key,
+      // and isn't otherwise useful here.
+      timeline("referencedCommits").arr.foreach { rc =>
+        val commitSha = rc("sha").str
+        if knownShas.contains(commitSha) then
+          val crossRepoNote = if rc("isCrossRepository").bool then " (cross-repository)" else ""
+          upsertRelation(
+            conn,
+            "commit_mentions_issue",
+            commitSha = Some(commitSha),
+            pullRequestId = None,
+            issueId = Some(issueId),
+            evidence = Some(s"GitHub ReferencedEvent$crossRepoNote"),
+            inspectCommitsRunId
+          )
+      }
+
+      // A PR that cross-references this issue without necessarily closing
+      // it (distinct from pr_closes_issue, a PR can do both, or just one).
+      timeline("crossReferencingPRs").arr.foreach { pr =>
+        val prId = upsertPullRequest(
+          conn,
+          repoId,
+          pr("number").num.toInt,
+          title = Some(pr("title").str),
+          url = Some(pr("url").str),
+          state = None,
+          firstSeenInspectCommitsRunId = Some(inspectCommitsRunId)
+        )
+        upsertRelation(conn, "pr_mentions_issue", commitSha = None, pullRequestId = Some(prId), issueId = Some(issueId), evidence = None, inspectCommitsRunId)
+      }
+
+      // A raw commit-SHA-shaped token in the issue's own body text, matched
+      // as a prefix against a commit this run actually knows about (a
+      // short SHA, as people commonly paste them, is still a prefix of the
+      // full one). A plain text heuristic, like commit_message_references_
+      // issue above, not a GitHub-confirmed relation.
+      val body = timeline("body").str
+      ShaMention.findAllMatchIn(body).map(_.group(0)).distinct.foreach { token =>
+        knownShas.find(_.startsWith(token.toLowerCase)).foreach { fullSha =>
+          upsertRelation(conn, "issue_mentions_commit", commitSha = Some(fullSha), pullRequestId = None, issueId = Some(issueId), evidence = Some(token), inspectCommitsRunId)
+        }
+      }
+    })
   end storeEnriched
 
   private val IssueNumberMention = """#(\d+)""".r
+  private val ShaMention = """(?i)\b[0-9a-f]{7,40}\b""".r
 
   // ---------------------------------------------------------------------
   // classified (from /classify_bugs)
@@ -456,7 +553,11 @@ object Store:
       "INSERT INTO pull_requests (repository_id, number, title, url, state, first_seen_inspect_commits_run_id) " +
         "VALUES (?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT(repository_id, number) DO UPDATE SET " +
-        "title = excluded.title, url = excluded.url, state = excluded.state, " +
+        // COALESCE, not a plain overwrite: a PR discovered via an issue's
+        // CrossReferencedEvent only gives number/title/url, no state, and
+        // that must not wipe out a real state this PR already has from
+        // being discovered a richer way (a commit's associatedPullRequests).
+        "title = COALESCE(excluded.title, title), url = COALESCE(excluded.url, url), state = COALESCE(excluded.state, state), " +
         "first_seen_inspect_commits_run_id = COALESCE(first_seen_inspect_commits_run_id, excluded.first_seen_inspect_commits_run_id)",
       Seq(repositoryId, number, title.orNull, url.orNull, state.orNull, firstSeenInspectCommitsRunId.map(_.asInstanceOf[Any]).orNull)
     )
@@ -475,7 +576,12 @@ object Store:
       "INSERT INTO issues (repository_id, number, title, url, first_seen_inspect_commits_run_id) " +
         "VALUES (?, ?, ?, ?, ?) " +
         "ON CONFLICT(repository_id, number) DO UPDATE SET " +
-        "title = excluded.title, url = excluded.url, " +
+        // COALESCE, not a plain overwrite: an issue can be upserted with no
+        // title/url known (a bare #N text mention, or a raw SHA match in
+        // another issue's body only gives a number), and that must not
+        // wipe out a real title/url this issue already has from being
+        // discovered a richer way (e.g. a PR's closingIssuesReferences).
+        "title = COALESCE(excluded.title, title), url = COALESCE(excluded.url, url), " +
         "first_seen_inspect_commits_run_id = COALESCE(first_seen_inspect_commits_run_id, excluded.first_seen_inspect_commits_run_id)",
       Seq(repositoryId, number, title.orNull, url.orNull, firstSeenInspectCommitsRunId.map(_.asInstanceOf[Any]).orNull)
     )

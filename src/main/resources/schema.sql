@@ -201,14 +201,40 @@ CREATE TABLE IF NOT EXISTS issues (
 -- type" to be one query, not a UNION across tables.
 --
 -- Exactly two of (commit_sha, pull_request_id, issue_id) are set per row;
--- which two, and what the edge means, is determined by relation_type:
---   commit_belongs_to_pr             (commit_sha, pull_request_id)
+-- which two, and what the edge means, is determined by relation_type. Two
+-- relation types can describe the same pair of endpoints and still both be
+-- true, or disagree, because they come from genuinely different GitHub
+-- queries:
+--   commit_associated_pr             (commit_sha, pull_request_id)
+--     Commit.associatedPullRequests: GitHub's own resolution of which
+--     PR(s) a commit belongs to.
+--   pr_contains_commit               (commit_sha, pull_request_id)
+--     PullRequest.commits: whether this exact sha is still in that PR's
+--     own commit list. Can disagree with commit_associated_pr (a rebase or
+--     force-push can drop a commit from a PR's list while GitHub still
+--     resolves the commit as associated with it), which is exactly why
+--     these are two relation types, not one.
 --   pr_closes_issue                  (pull_request_id, issue_id)
---   commit_message_references_issue  (commit_sha, issue_id) -- a raw #N-shaped
---     match in the commit's own message, unconfirmed by GitHub, so it is
---     kept distinct from the future GitHub-confirmed commit_mentions_issue.
--- Future relation types (need per-issue timeline/comment data not fetched
--- yet): commit_mentions_issue, pr_references_issue, issue_mentions_commit_sha.
+--     PullRequest.closingIssuesReferences: a fact about the PR as a whole,
+--     never attributed to one commit inside it.
+--   pr_mentions_issue                (pull_request_id, issue_id)
+--     An issue's CrossReferencedEvent whose source is that PR: the PR
+--     references the issue, which does not imply it closes it (a PR can
+--     have both a pr_mentions_issue and a pr_closes_issue row for the same
+--     pair, or just one).
+--   commit_mentions_issue            (commit_sha, issue_id)
+--     An issue's ReferencedEvent naming that commit: GitHub's own
+--     confirmation that the commit's message referenced the issue.
+--   issue_mentions_commit            (commit_sha, issue_id)
+--     A commit-SHA-shaped token found in the issue's own body text,
+--     matched as a prefix against a commit this run knows about. A plain
+--     text heuristic, not GitHub-confirmed, we don't fetch issue comments,
+--     only the body.
+--   commit_message_references_issue  (commit_sha, issue_id)
+--     A raw #N-shaped match in the commit's own message, unconfirmed by
+--     GitHub (it doesn't know whether #N is really an issue or a PR
+--     number in this repo), kept distinct from the GitHub-confirmed
+--     commit_mentions_issue above.
 CREATE TABLE IF NOT EXISTS relations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   relation_type TEXT NOT NULL,

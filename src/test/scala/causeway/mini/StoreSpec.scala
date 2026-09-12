@@ -120,7 +120,17 @@ class StoreSpec extends FunSuite:
       "commits" -> commits
     )
 
-  private def commitWithPr(sha: String, fullMessage: String, prNumber: Int, closingIssueNumbers: List[Int]): ujson.Value =
+  private def commitWithPr(
+      sha: String,
+      fullMessage: String,
+      prNumber: Int,
+      closingIssueNumbers: List[Int],
+      prCommitShas: List[String] = null
+  ): ujson.Value =
+    // Defaults to a PR whose own commit list actually contains this sha,
+    // the common case. Pass an explicit prCommitShas (e.g. Nil, or some
+    // other sha) to simulate the divergence pr_contains_commit exists for.
+    val effectivePrCommitShas = if prCommitShas == null then List(sha) else prCommitShas
     ujson.Obj(
       "sha" -> sha,
       "shortMessage" -> fullMessage,
@@ -133,7 +143,9 @@ class StoreSpec extends FunSuite:
           "state" -> "MERGED",
           "closingIssues" -> closingIssueNumbers.map { n =>
             ujson.Obj("number" -> n, "title" -> s"Issue $n", "url" -> s"https://github.com/acme/widgets/issues/$n")
-          }
+          },
+          "commitShas" -> effectivePrCommitShas,
+          "commitTotalCount" -> effectivePrCommitShas.length
         )
       )
     )
@@ -150,9 +162,9 @@ class StoreSpec extends FunSuite:
 
       Store.storeInto(conn, enrichedJson("run-A", List(commitA, commitB)), "run-A_enriched.json")
 
-      // Both commits really do belong to PR 10, that's a genuine per-commit
-      // fact, so two rows here is correct.
-      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_belongs_to_pr'"), 2)
+      // Both commits really are associated with PR 10, that's a genuine
+      // per-commit fact, so two rows here is correct.
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_associated_pr'"), 2)
 
       // But PR 10 closing issue 42 must appear exactly once, as an edge
       // between the PR and the issue, not once per commit in that PR. The
@@ -205,8 +217,129 @@ class StoreSpec extends FunSuite:
       Store.storeInto(conn, json, "run-D_enriched.json")
       Store.storeInto(conn, json, "run-D_enriched.json")
 
-      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_belongs_to_pr'"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_associated_pr'"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_contains_commit'"), 1)
       assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_closes_issue'"), 1)
       assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_message_references_issue'"), 1)
+    finally conn.close()
+  }
+
+  test("commit_associated_pr and pr_contains_commit can disagree: a commit resolved as associated with a PR that no longer contains it") {
+    val conn = openTempDb()
+    try
+      // GitHub resolves shaE as associated with PR 30, but a rebase moved
+      // shaE out of PR 30's own commit list (which now only contains some
+      // other sha). commit_associated_pr must still be recorded (GitHub
+      // said so), pr_contains_commit must not be (it genuinely isn't there
+      // anymore).
+      val commit = commitWithPr("shaE", "rebased work", prNumber = 30, closingIssueNumbers = Nil, prCommitShas = List("someOtherSha"))
+
+      Store.storeInto(conn, enrichedJson("run-E", List(commit)), "run-E_enriched.json")
+
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_associated_pr' AND commit_sha = 'shaE'"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_contains_commit' AND commit_sha = 'shaE'"), 0)
+    finally conn.close()
+  }
+
+  private def enrichedJsonWithIssueTimelines(runId: String, commits: List[ujson.Value], issueTimelines: List[ujson.Value]): ujson.Value =
+    ujson.Obj(
+      "runId" -> runId,
+      "repoUrl" -> "https://github.com/acme/widgets",
+      "owner" -> "acme",
+      "repo" -> "widgets",
+      "enrichedCommitCount" -> commits.length,
+      "commits" -> commits,
+      "issueTimelines" -> issueTimelines
+    )
+
+  test("an issue's own ReferencedEvent timeline produces a GitHub-confirmed commit_mentions_issue relation") {
+    val conn = openTempDb()
+    try
+      val commit = ujson.Obj("sha" -> "shaF", "shortMessage" -> "fix thing", "fullMessage" -> "fix thing", "pullRequests" -> List.empty[ujson.Value])
+      val timeline = ujson.Obj(
+        "number" -> 55,
+        "body" -> "some issue body with nothing sha-shaped in it",
+        "referencedCommits" -> List(ujson.Obj("sha" -> "shaF", "isCrossRepository" -> false)),
+        "crossReferencingPRs" -> List.empty[ujson.Value]
+      )
+
+      Store.storeInto(conn, enrichedJsonWithIssueTimelines("run-F", List(commit), List(timeline)), "run-F_enriched.json")
+
+      assertEquals(
+        count(
+          conn,
+          "SELECT COUNT(*) FROM relations r JOIN issues i ON i.id = r.issue_id " +
+            "WHERE r.relation_type = 'commit_mentions_issue' AND r.commit_sha = 'shaF' AND i.number = 55"
+        ),
+        1
+      )
+    finally conn.close()
+  }
+
+  test("a referenced commit this run never scanned is not linked (would violate the commits foreign key)") {
+    val conn = openTempDb()
+    try
+      val commit = ujson.Obj("sha" -> "shaG", "shortMessage" -> "unrelated", "fullMessage" -> "unrelated", "pullRequests" -> List.empty[ujson.Value])
+      val timeline = ujson.Obj(
+        "number" -> 56,
+        "body" -> "",
+        "referencedCommits" -> List(ujson.Obj("sha" -> "some-unscanned-sha", "isCrossRepository" -> false)),
+        "crossReferencingPRs" -> List.empty[ujson.Value]
+      )
+
+      Store.storeInto(conn, enrichedJsonWithIssueTimelines("run-G", List(commit), List(timeline)), "run-G_enriched.json")
+
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_mentions_issue'"), 0)
+    finally conn.close()
+  }
+
+  test("an issue's CrossReferencedEvent from a PR produces pr_mentions_issue, distinct from pr_closes_issue") {
+    val conn = openTempDb()
+    try
+      val timeline = ujson.Obj(
+        "number" -> 57,
+        "body" -> "",
+        "referencedCommits" -> List.empty[ujson.Value],
+        "crossReferencingPRs" -> List(ujson.Obj("number" -> 99, "title" -> "Discusses the issue", "url" -> "https://github.com/acme/widgets/pull/99"))
+      )
+
+      Store.storeInto(conn, enrichedJsonWithIssueTimelines("run-H", Nil, List(timeline)), "run-H_enriched.json")
+
+      assertEquals(
+        count(
+          conn,
+          "SELECT COUNT(*) FROM relations r JOIN pull_requests p ON p.id = r.pull_request_id JOIN issues i ON i.id = r.issue_id " +
+            "WHERE r.relation_type = 'pr_mentions_issue' AND p.number = 99 AND i.number = 57"
+        ),
+        1
+      )
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_closes_issue'"), 0)
+    finally conn.close()
+  }
+
+  test("a commit SHA-shaped token in an issue's body text produces issue_mentions_commit, matched by prefix") {
+    val conn = openTempDb()
+    try
+      val fullSha = "abc1234567890def1234567890abc1234567890"
+      val commit = ujson.Obj("sha" -> fullSha, "shortMessage" -> "some fix", "fullMessage" -> "some fix", "pullRequests" -> List.empty[ujson.Value])
+      // People commonly paste a short (7-12 char) prefix of a sha, not the
+      // full 40 characters, in issue text.
+      val timeline = ujson.Obj(
+        "number" -> 58,
+        "body" -> s"This looks related to ${fullSha.take(10)}, can someone check?",
+        "referencedCommits" -> List.empty[ujson.Value],
+        "crossReferencingPRs" -> List.empty[ujson.Value]
+      )
+
+      Store.storeInto(conn, enrichedJsonWithIssueTimelines("run-I", List(commit), List(timeline)), "run-I_enriched.json")
+
+      assertEquals(
+        count(
+          conn,
+          "SELECT COUNT(*) FROM relations r JOIN issues i ON i.id = r.issue_id " +
+            s"WHERE r.relation_type = 'issue_mentions_commit' AND r.commit_sha = '$fullSha' AND i.number = 58"
+        ),
+        1
+      )
     finally conn.close()
   }

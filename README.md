@@ -59,10 +59,11 @@ This is the tool behind the `inspect-commits` subcommand. Internally it:
 
 1. Reads the JSON file that `InspectRepo` produced.
 2. Takes only as many commits as the scan commit limit allows (the most recent ones).
-3. Asks GitHub's GraphQL API for the pull requests and issues linked to those commits, grouping up to 20 commits into a single request instead of sending one request per commit.
-4. For every commit that isn't a merge commit, computes the exact before and after code using JGit, running several of these comparisons at once instead of one at a time.
-5. Skips the code comparison for merge commits, since a merge doesn't have one clean "before and after" to point to.
-6. Combines all of this into a new JSON file, leaving the original file from step 2 untouched.
+3. Asks GitHub's GraphQL API for the pull requests linked to those commits (and, for each PR, its own commit list, and which issues it closes), grouping up to 20 commits into a single request instead of sending one request per commit.
+4. For every issue discovered that way, asks a second batched GraphQL query for that issue's own timeline (which commits GitHub itself confirms referenced it, which pull requests cross-reference it) and body text.
+5. For every commit that isn't a merge commit, computes the exact before and after code using JGit, running several of these comparisons at once instead of one at a time.
+6. Skips the code comparison for merge commits, since a merge doesn't have one clean "before and after" to point to.
+7. Combines all of this into a new JSON file, leaving the original file from step 2 untouched. This file only fetches the raw data, `Store.scala` is what turns it into the typed relations described below.
 
 ### `src/main/resources/schema.sql`
 
@@ -260,7 +261,9 @@ The same commit from before now has two new fields added, `pullRequests` and `di
       "state": "MERGED",
       "closingIssues": [
         { "number": 1071, "title": "XML.toString: unescaped keys allow XML element injection (CWE-91)" }
-      ]
+      ],
+      "commitShas": ["e2cfb5a64150455bf63ad334da9827e7671c9133", "6b993e2e47b9a328a9d166a720b33fa7e3e58848", "3dd0ec02f25c7c8f716fd62e1e3ffc6254004275"],
+      "commitTotalCount": 3
     }
   ],
   "diff": {
@@ -274,6 +277,22 @@ The same commit from before now has two new fields added, `pullRequests` and `di
       }
     ]
   }
+}
+```
+
+Alongside the commit list, the enriched file also carries a top-level `issueTimelines` array, one entry per issue discovered via `closingIssues` above, with data fetched from the issue's own side rather than through a commit or PR:
+
+```json
+{
+  "number": 1071,
+  "body": "... the issue's own description text ...",
+  "referencedCommits": [
+    { "sha": "4f859fdf3b5669894c5ed8a305ee5cd5f1fe2b7a", "isCrossRepository": false },
+    { "sha": "3dd0ec02f25c7c8f716fd62e1e3ffc6254004275", "isCrossRepository": true }
+  ],
+  "crossReferencingPRs": [
+    { "number": 1072, "title": "Reject invalid XML element names", "url": "https://github.com/stleary/JSON-java/pull/1072" }
+  ]
 }
 ```
 
@@ -324,16 +343,30 @@ Repeating a step (say, re-running `/inspect_repo` for the same repo and window) 
 
 ### How a commit connects to a PR or an issue
 
-A commit belonging to a PR, a PR closing an issue, and a commit's own message merely mentioning an issue number are three different claims with three different strengths of evidence, so they're kept as three distinctly-typed rows in one `relations` table (a `relation_type` column says which kind each row is), rather than collapsed into one generic "this commit relates to this issue" fact. That collapsing used to be a real bug here: attributing a PR's closing issue to every commit inside that PR overstated the connection for every commit in the PR except whichever one actually did the closing, since closing an issue is a fact about the PR as a whole, not about any one commit in it. Querying across relation types is just a `WHERE relation_type = '...'`, or no filter at all for "every relation touching this commit."
+A commit belonging to a PR, a PR closing an issue, and a commit's own message merely mentioning an issue number are three different claims with three different strengths of evidence, and that's only the start of the list, so they're kept as distinctly-typed rows in one `relations` table (a `relation_type` column says which kind each row is, and `evidence` records the source text or GitHub field that established it), rather than collapsed into one generic "this commit relates to this issue" fact. That collapsing used to be a real bug here: attributing a PR's closing issue to every commit inside that PR overstated the connection for every commit in the PR except whichever one actually did the closing, since closing an issue is a fact about the PR as a whole, not about any one commit in it. Querying across relation types is just a `WHERE relation_type = '...'`, or no filter at all for "every relation touching this commit."
 
-For example, after running the full pipeline once, this finds every genuine bug fix found so far, across every classification run, joining through whichever PR actually closed the linked issue (not just any PR the commit happened to belong to):
+All seven relation types currently populated:
+
+| `relation_type` | Endpoints | Source | Evidence |
+|---|---|---|---|
+| `commit_associated_pr` | commit, PR | `Commit.associatedPullRequests` | `"Commit.associatedPullRequests"` |
+| `pr_contains_commit` | commit, PR | that PR's own `commits` list actually contains the sha | note + the PR's total commit count |
+| `pr_closes_issue` | PR, issue | `PullRequest.closingIssuesReferences` | `"PullRequest.closingIssuesReferences"` |
+| `pr_mentions_issue` | PR, issue | the issue's own `CrossReferencedEvent` timeline, source a PR | — |
+| `commit_mentions_issue` | commit, issue | the issue's own `ReferencedEvent` timeline (GitHub-confirmed) | note, flags a cross-repository reference |
+| `issue_mentions_commit` | commit, issue | a commit-SHA-shaped token found in the issue's own body text | the matched token |
+| `commit_message_references_issue` | commit, issue | a raw `#123`-shaped match in the commit's own message | the matched `#N` |
+
+`commit_associated_pr` and `pr_contains_commit` look at first glance like the same fact from two directions, they aren't: they come from two separately-queried GitHub facts that can disagree. A merge commit is a common real example, GitHub resolves it as "associated" with the PR it merged, but a PR's own commit list usually doesn't include the merge commit itself, only the commits that were merged in, so a merge commit typically gets a `commit_associated_pr` row with no matching `pr_contains_commit` row. `pr_mentions_issue` and `pr_closes_issue` can likewise both exist for the same PR/issue pair (a PR can reference an issue without its reference being the thing that closes it), or just one.
+
+For example, after running the full pipeline once, this finds every genuine bug fix found so far, across every classification run, joining through whichever PR actually closed the linked issue (not just any PR the commit happened to be associated with):
 
 ```sql
 SELECT c.sha, c.short_message, i.title AS issue_title, bc.verdict_rationale
 FROM bug_classifications bc
 JOIN commits c ON c.sha = bc.commit_sha
-LEFT JOIN relations belongs ON belongs.relation_type = 'commit_belongs_to_pr' AND belongs.commit_sha = c.sha
-LEFT JOIN relations closes ON closes.relation_type = 'pr_closes_issue' AND closes.pull_request_id = belongs.pull_request_id
+LEFT JOIN relations associated ON associated.relation_type = 'commit_associated_pr' AND associated.commit_sha = c.sha
+LEFT JOIN relations closes ON closes.relation_type = 'pr_closes_issue' AND closes.pull_request_id = associated.pull_request_id
 LEFT JOIN issues i ON i.id = closes.issue_id
 WHERE bc.verdict = 1;
 ```
