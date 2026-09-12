@@ -16,6 +16,19 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# GitHub access, including the credential, belongs to this CLI layer, not
+# to whatever chat command happens to invoke it: every subcommand that
+# talks to GitHub reads GITHUB_TOKEN from its own process environment, and
+# this is the one place that environment gets populated, so no command
+# instructions need their own "source .env" step (or a raw curl call) ever
+# again. Doesn't override a GITHUB_TOKEN already exported by the caller.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
 CLASSES_DIR="target/out/jvm/scala-3.3.6/causeway-mini/classes"
 CACHE_FILE="target/causeway-classpath.txt"
 

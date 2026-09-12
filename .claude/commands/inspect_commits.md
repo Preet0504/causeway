@@ -11,21 +11,15 @@ If this conversation already knows the evidence file path from a `/inspect_repo`
 
 Otherwise, ask the user for the path to the evidence file `/inspect_repo` produced (or list `workspace/exports/*.json` — excluding any `*_enriched.json` files — and ask them to confirm which run to enrich if more than one exists).
 
-## 2. Make sure GITHUB_TOKEN is available
-
-This step calls GitHub's GraphQL API, which requires authentication. Before running the tool, source the repo's `.env` file so `GITHUB_TOKEN` is set in the shell:
-
-```bash
-set -a && . ./.env && set +a
-```
-
-## 3. Run the enrichment tool
+## 2. Run the enrichment tool
 
 From the repository root:
 
 ```bash
 tools/causeway inspect-commits --evidence-file <path-to-evidence-file>
 ```
+
+This calls GitHub's GraphQL API, which needs a credential, `tools/causeway` sources `.env` itself before running anything, so `GITHUB_TOKEN` doesn't need to be prepared by this command, just present in `.env` at the repo root.
 
 This does two things, both bounded by the evidence file's own `scanCommitLimit` (only that many of the window's commits, the most recent ones, get enriched; if `scanCommitLimit` is null, every window commit is enriched):
 - Fetches PRs and their closing issues for every commit in one batched GraphQL request per ~20 commits (not one request per commit).
@@ -40,7 +34,7 @@ If the command fails, or doesn't print an `ENRICHED_FILE` line, report the failu
 
 `tools/causeway` rebuilds automatically the first time it's run after a source change, every other invocation runs the already-compiled code directly with no sbt involved. If something still behaves unexpectedly right after a code change, delete `target/causeway-classpath.txt` to force a fresh rebuild on the next call.
 
-## 4. Store the enrichment in the SQLite catalog
+## 3. Store the enrichment in the SQLite catalog
 
 ```bash
 tools/causeway store --file <enriched-file>
@@ -50,7 +44,7 @@ This upserts this run, plus every enriched commit's PRs, issues, and issue-commi
 
 If this fails, report it plainly but don't treat it as blocking, the enriched file itself is still valid and `/classify_bugs` only reads that.
 
-## 5. Final report
+## 4. Final report
 
 Produce one final message stating, plainly:
 - How many commits were enriched, out of how many were in the window

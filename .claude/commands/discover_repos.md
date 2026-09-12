@@ -13,9 +13,7 @@ If their answer doesn't mention how many candidate repositories they want back, 
 
 ## 2. Hand off to the repo-discovery agent
 
-Invoke the `repo-discovery` agent (`subagent_type: "repo-discovery"`) with the person's requirements and the max result count, in plain language, embedded in your prompt to it. That agent translates plain language into `tools/causeway search-repos`'s structured flags and runs it, that translation is its job, not yours, don't attempt to construct the flags yourself first.
-
-Before invoking it, make sure `GITHUB_TOKEN` is available the same way `/inspect_commits` ensures it: source `.env` if it isn't already loaded (`set -a && . ./.env && set +a`).
+Invoke the `repo-discovery` agent (`subagent_type: "repo-discovery"`) with the person's requirements and the max result count, in plain language, embedded in your prompt to it. That agent translates plain language into `tools/causeway search-repos`'s structured flags and runs it, that translation is its job, not yours, don't attempt to construct the flags yourself first. `GITHUB_TOKEN` doesn't need to be prepared beforehand, `tools/causeway` sources `.env` itself before running anything.
 
 If the agent reports a failure, or that the requirements were too vague to translate into a meaningful search, relay that plainly and ask a clarifying question rather than guessing at flags yourself.
 

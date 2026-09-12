@@ -35,7 +35,7 @@ Run exactly one command:
 tools/causeway search-repos --language <...> --min-stars <...> [... whichever flags apply] --max-results <N>
 ```
 
-`GITHUB_TOKEN` must already be set in the environment (source `.env` first with `set -a && . ./.env && set +a` if it isn't, the same way other Causeway Mini steps do).
+`GITHUB_TOKEN` doesn't need any preparation from you, `tools/causeway` sources `.env` itself before running anything.
 
 Read the tool's output:
 - `REPO owner=... repo=... stars=... language=... url=...` — one line per discovered repository, already inserted into the database.

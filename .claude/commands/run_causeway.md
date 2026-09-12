@@ -15,20 +15,16 @@ Initialize a counter `retries = 0` for this run.
 
 ## 2. Validate the URL against GitHub
 
-From the answer, derive `owner` and `repo`:
-- Strip a leading `https://github.com/`, `http://github.com/`, or `git@github.com:` prefix.
-- Strip a trailing `.git` and any trailing `/`.
-- Split what remains on `/`; the first segment is `owner`, the second is `repo`.
-- If no plausible `owner`/`repo` pair can be extracted at all, treat this the same as a failed check below (skip straight to the failure branch, don't bother running curl).
-
-Otherwise, run:
+Run:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/<owner>/<repo>"
+tools/causeway inspect-repo --mode validate --repo-url "<url>"
 ```
 
-- **Status `200`** — the repo exists. Go to step 3.
-- **Anything else** (404, error, or no owner/repo could be extracted):
+This is the only network call this step makes, GitHub access and the credential it needs both live in the Scala CLI, not in this command's own instructions.
+
+- **Prints `VALID=true`** — the repo exists. Go to step 3.
+- **Prints `VALID=false`, or the command fails outright** (a malformed URL the tool can't even parse an owner/repo out of counts as this case too):
   - Increment `retries`.
   - If `retries` has now reached `3`, stop the onboarding flow. Tell the user plainly that the repo could not be validated after 3 attempts and the run is ending.
   - Otherwise, tell the user clearly that the URL they gave was not reachable as a GitHub repository, and ask again, verbatim:

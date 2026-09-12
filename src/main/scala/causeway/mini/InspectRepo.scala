@@ -21,8 +21,12 @@ import scala.jdk.CollectionConverters.*
   * the default may be exactly what's wanted. Every run is explicit about
   * both, driven by an orchestrator that lists the real options and lets a
   * person choose, rather than the tool silently picking one. Runs as one
-  * of four modes, selected by `--mode`:
+  * of five modes, selected by `--mode`:
   *
+  *   - `validate --repo-url <url>`: checks whether the URL names a real
+  *     GitHub repository (prints `VALID=true` or `VALID=false`), the
+  *     network call `/run_causeway` used to make itself via a raw `curl`.
+  *     Nothing is cloned, this runs before a repo is committed to at all.
   *   - `list-remotes`: clone (or open an existing clone) and print every
   *     configured remote's name and URL. Nothing is fetched yet.
   *   - `list-branches --remote-name <name>`: fetch from that remote, look
@@ -56,17 +60,52 @@ object InspectRepo:
     */
   def run(args: Array[String]): Unit =
     val opts = parseArgs(args)
-    val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
-    val (owner, repo) = parseOwnerRepo(repoUrl)
-    val workspaceDir = new File(s"workspace/$owner-$repo")
+    val token = sys.env.getOrElse("GITHUB_TOKEN", fail("GITHUB_TOKEN environment variable is required"))
 
-    opts.getOrElse("mode", fail("--mode is required (list-remotes, list-branches, count, or write)")) match
-      case "list-remotes"  => runListRemotes(repoUrl, workspaceDir)
-      case "list-branches" => runListBranches(workspaceDir, opts)
-      case "count"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = false)
-      case "write"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = true)
-      case other            => fail(s"Unknown --mode '$other'")
+    if opts.getOrElse("mode", fail("--mode is required (validate, list-remotes, list-branches, count, or write)")) == "validate" then
+      val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
+      val (owner, repo) = parseOwnerRepo(repoUrl)
+      runValidate(owner, repo, token)
+    else
+      val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
+      val (owner, repo) = parseOwnerRepo(repoUrl)
+      val workspaceDir = new File(s"workspace/$owner-$repo")
+
+      opts("mode") match
+        case "list-remotes"  => runListRemotes(repoUrl, workspaceDir)
+        case "list-branches" => runListBranches(workspaceDir, opts, token)
+        case "count"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = false)
+        case "write"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = true)
+        case other            => fail(s"Unknown --mode '$other'")
   end run
+
+  // ---------------------------------------------------------------------
+  // Mode: validate
+  // ---------------------------------------------------------------------
+
+  /** Checks whether a repo URL actually names a real GitHub repository,
+    * the network call `/run_causeway` used to make itself via a raw
+    * `curl`, before it knew a repo URL was even worth acting on further.
+    * Deliberately does not clone anything, this runs before a person has
+    * committed to mining a specific repo at all.
+    */
+  private def runValidate(owner: String, repo: String, token: String): Unit =
+    val client = HttpClient.newBuilder().connectTimeout(JDuration.ofSeconds(15)).build()
+    val request = HttpRequest
+      .newBuilder()
+      .uri(URI.create(s"$GitHubApiBase/repos/$owner/$repo"))
+      .header("Accept", "application/vnd.github+json")
+      .header("Authorization", s"Bearer $token")
+      .timeout(JDuration.ofSeconds(30))
+      .GET()
+      .build()
+    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    response.statusCode() match
+      case 200 => println("VALID=true")
+      case 404 => println("VALID=false")
+      case status =>
+        fail(s"GitHub API request to validate $owner/$repo failed with status $status: ${response.body().take(500)}")
+  end runValidate
 
   // ---------------------------------------------------------------------
   // Mode: list-remotes
@@ -97,7 +136,7 @@ object InspectRepo:
   // Mode: list-branches
   // ---------------------------------------------------------------------
 
-  private def runListBranches(workspaceDir: File, opts: Map[String, String]): Unit =
+  private def runListBranches(workspaceDir: File, opts: Map[String, String], token: String): Unit =
     val remoteName = opts.getOrElse("remote-name", fail("--remote-name is required"))
     if !workspaceDir.exists() then fail(s"No clone at ${workspaceDir.getPath}, run list-remotes first")
     val git = Git.open(workspaceDir)
@@ -111,28 +150,29 @@ object InspectRepo:
     git.close()
 
     val (remoteOwner, remoteRepo) = parseOwnerRepo(remoteUrl)
-    val defaultBranch = fetchDefaultBranch(remoteOwner, remoteRepo)
-    val branches = fetchBranches(remoteOwner, remoteRepo)
+    val defaultBranch = fetchDefaultBranch(remoteOwner, remoteRepo, token)
+    val branches = fetchBranches(remoteOwner, remoteRepo, token)
     if branches.isEmpty then fail(s"GitHub reported no branches for $remoteOwner/$remoteRepo")
     branches.foreach { case (name, sha) =>
       println(s"BRANCH name=$name sha=$sha isDefault=${name == defaultBranch}")
     }
   end runListBranches
 
-  private def fetchDefaultBranch(owner: String, repo: String): String =
-    val body = httpGet(s"$GitHubApiBase/repos/$owner/$repo")
+  private def fetchDefaultBranch(owner: String, repo: String, token: String): String =
+    val body = httpGet(s"$GitHubApiBase/repos/$owner/$repo", token)
     ujson.read(body)("default_branch").str
 
-  private def fetchBranches(owner: String, repo: String): List[(String, String)] =
-    val body = httpGet(s"$GitHubApiBase/repos/$owner/$repo/branches?per_page=100")
+  private def fetchBranches(owner: String, repo: String, token: String): List[(String, String)] =
+    val body = httpGet(s"$GitHubApiBase/repos/$owner/$repo/branches?per_page=100", token)
     ujson.read(body).arr.toList.map(b => (b("name").str, b("commit")("sha").str))
 
-  private def httpGet(url: String): String =
+  private def httpGet(url: String, token: String): String =
     val client = HttpClient.newBuilder().connectTimeout(JDuration.ofSeconds(15)).build()
     val request = HttpRequest
       .newBuilder()
       .uri(URI.create(url))
       .header("Accept", "application/vnd.github+json")
+      .header("Authorization", s"Bearer $token")
       .timeout(JDuration.ofSeconds(30))
       .GET()
       .build()

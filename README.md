@@ -32,7 +32,7 @@ The single compiled entry point for everything. Rather than each tool having its
 
 ### `tools/causeway`
 
-The launcher script the chat commands actually call: `tools/causeway inspect-repo --mode list-remotes ...`. It runs `java` directly against already-compiled classes and a cached classpath, no `sbt` involved. The first time it's run after a source file or `build.sbt` changes, it notices (by comparing file timestamps against its cache), recompiles once, and refreshes the cache automatically, every other invocation just runs, typically under a second of pure JVM startup instead of sbt's several-second build-server round trip.
+The launcher script the chat commands actually call: `tools/causeway inspect-repo --mode list-remotes ...`. It runs `java` directly against already-compiled classes and a cached classpath, no `sbt` involved. The first time it's run after a source file or `build.sbt` changes, it notices (by comparing file timestamps against its cache), recompiles once, and refreshes the cache automatically, every other invocation just runs, typically under a second of pure JVM startup instead of sbt's several-second build-server round trip. It also sources `.env` itself, before running anything, so `GITHUB_TOKEN` is always available to whichever subcommand needs it, no chat command instructions have to prepare it (or make a raw network call of their own) beforehand.
 
 ### `src/main/scala/causeway/mini/SearchRepos.scala`
 
@@ -44,14 +44,17 @@ This is the tool behind the `qualify-repos` subcommand, a cheap pre-clone check 
 
 ### `src/main/scala/causeway/mini/InspectRepo.scala`
 
-This is the tool behind the `inspect-repo` subcommand. It doesn't auto-detect which remote or which branch to use, a repo URL alone doesn't define that, a clone can have more than one remote (a fork's `origin` pointing at the fork, `upstream` at the original), and the "default" branch isn't necessarily the one worth mining. Instead it runs as one of four modes, each a separate invocation, so the orchestrator can show real options to the user between them:
+This is the tool behind the `inspect-repo` subcommand. It doesn't auto-detect which remote or which branch to use, a repo URL alone doesn't define that, a clone can have more than one remote (a fork's `origin` pointing at the fork, `upstream` at the original), and the "default" branch isn't necessarily the one worth mining. Instead it runs as one of five modes, each a separate invocation, so the orchestrator can show real options to the user between them:
 
-1. **`list-remotes`**: downloads the repo with JGit if it hasn't already been downloaded, or opens the existing copy if it has, then prints every remote actually configured there, name and URL. Nothing is fetched yet.
-2. **`list-branches`**, given a chosen remote name: fetches from that remote (a repo's default branch moves, so a reused local copy would otherwise silently serve whatever it looked like last time this tool touched it), reads that remote's own configured URL, and asks GitHub's REST API for every branch on that repository, each with its current commit SHA, flagging whichever one GitHub calls the default.
-3. **`count`**, given a chosen remote, branch, and its exact SHA (from step 2's output): walks backward through commit history starting from that exact pinned commit, checking every commit's timestamp individually rather than assuming they only get older the further back it goes (a real Git history isn't guaranteed to be ordered that way, clock skew and rebases can produce a commit whose timestamp is later than its own parent's), and just prints how many fall in the window. Writes nothing, this is a cheap preview.
-4. **`write`**, same inputs as `count` plus a scan commit limit: writes every commit it found, message, author, date, and so on, plus which remote, branch, and SHA were pinned, into a JSON file.
+1. **`validate`**, given just a repo URL: checks whether it names a real GitHub repository (`VALID=true`/`VALID=false`), nothing is cloned. This is the network call `/run_causeway` used to make itself directly, with a raw `curl`, before GitHub access was centralized into this CLI.
+2. **`list-remotes`**: downloads the repo with JGit if it hasn't already been downloaded, or opens the existing copy if it has, then prints every remote actually configured there, name and URL. Nothing is fetched yet.
+3. **`list-branches`**, given a chosen remote name: fetches from that remote (a repo's default branch moves, so a reused local copy would otherwise silently serve whatever it looked like last time this tool touched it), reads that remote's own configured URL, and asks GitHub's REST API for every branch on that repository, each with its current commit SHA, flagging whichever one GitHub calls the default.
+4. **`count`**, given a chosen remote, branch, and its exact SHA (from step 3's output): walks backward through commit history starting from that exact pinned commit, checking every commit's timestamp individually rather than assuming they only get older the further back it goes (a real Git history isn't guaranteed to be ordered that way, clock skew and rebases can produce a commit whose timestamp is later than its own parent's), and just prints how many fall in the window. Writes nothing, this is a cheap preview.
+5. **`write`**, same inputs as `count` plus a scan commit limit: writes every commit it found, message, author, date, and so on, plus which remote, branch, and SHA were pinned, into a JSON file.
 
-`count` and `write` never re-fetch or re-resolve the SHA they're given, they trust it outright, since that SHA is the exact thing a person already chose in step 2. Re-checking it against whatever's newest at that later moment would silently defeat the point of pinning.
+Every mode that talks to GitHub does so with `GITHUB_TOKEN` (better rate limits than an unauthenticated call), which it reads from its own process environment, populated by `tools/causeway` sourcing `.env` before this tool ever runs.
+
+`count` and `write` never re-fetch or re-resolve the SHA they're given, they trust it outright, since that SHA is the exact thing a person already chose in step 3. Re-checking it against whatever's newest at that later moment would silently defeat the point of pinning.
 
 ### `src/main/scala/causeway/mini/EnrichCommits.scala`
 
@@ -91,7 +94,7 @@ Instructions that say: reuse the repo and time window from the previous command 
 
 ### `.claude/commands/inspect_commits.md`
 
-Instructions that say: find the JSON file from the previous step, make sure the GitHub access token is loaded from `.env`, run the enrichment tool, store the resulting enriched file into the SQLite catalog, show a few example results, and point the user to `/classify_bugs` next.
+Instructions that say: find the JSON file from the previous step, run the enrichment tool, store the resulting enriched file into the SQLite catalog, show a few example results, and point the user to `/classify_bugs` next. It doesn't load the GitHub access token itself, that's `tools/causeway`'s own job now.
 
 ### `.claude/commands/classify_bugs.md`
 
@@ -228,7 +231,7 @@ One commit from inside that JSON file looks like this (trimmed):
 
 What happens, step by step:
 
-It finds the JSON file from the previous step. It makes sure the GitHub access token from `.env` is available. For every commit up to the scan commit limit, it asks GitHub for linked pull requests and issues, in batches of up to 20 commits per request rather than one request each. For every non-merge commit, it computes the actual code change using JGit. It writes a new JSON file with all of this added, and shows you a few examples directly.
+It finds the JSON file from the previous step. For every commit up to the scan commit limit, it asks GitHub for linked pull requests and issues, in batches of up to 20 commits per request rather than one request each. For every non-merge commit, it computes the actual code change using JGit. It writes a new JSON file with all of this added, and shows you a few examples directly.
 
 Example output:
 
