@@ -73,17 +73,31 @@ class QualifyReposSpec extends FunSuite:
       rs.getInt(1)
     finally stmt.close()
 
-  test("re-qualifying a repository replaces its one current row, not a historical duplicate") {
+  test("re-qualifying a repository updates its row in place, never creating a second repositories row") {
     val conn = openTempDb()
     try
       Store.applySchema(conn)
       val repositoryId = Store.upsertRepository(conn, "acme", "widgets", "https://github.com/acme/widgets")
 
       val firstCheck = QualifyRepos.QualificationResult(
+        htmlUrl = "https://github.com/acme/widgets",
+        description = None,
+        repoCreatedAt = None,
+        forksCount = None,
+        topics = Nil,
+        defaultBranch = "main",
+        currentStars = None,
+        currentLanguage = None,
+        currentSizeKb = None,
+        currentArchived = None,
+        currentFork = None,
+        currentLicense = None,
         hasIssues = true,
         closedIssueCount = 0,
+        openIssueCount = 2,
         mergedPrCount = 0,
-        appearsToHaveTests = false,
+        openPrCount = 1,
+        testFileCount = 0,
         testEvidencePaths = Nil,
         treeTruncated = false,
         qualifies = false,
@@ -95,7 +109,7 @@ class QualifyReposSpec extends FunSuite:
       val secondCheck = firstCheck.copy(closedIssueCount = 3, qualifies = true, rejectionReason = None)
       QualifyRepos.upsertQualification(conn, repositoryId, secondCheck)
 
-      assertEquals(count(conn, "SELECT COUNT(*) FROM repository_qualifications"), 1)
-      assertEquals(count(conn, "SELECT COUNT(*) FROM repository_qualifications WHERE qualifies = 1 AND closed_issue_count = 3"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM repositories"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM repositories WHERE rejection_reason IS NULL AND closed_issue_count = 3"), 1)
     finally conn.close()
   }

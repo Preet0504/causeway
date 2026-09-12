@@ -8,11 +8,11 @@ Run the Causeway Mini bug-classification flow. This reads an `/inspect_commits` 
 
 If this conversation already knows the enriched evidence file path from an `/inspect_commits` run earlier in this session, use it directly.
 
-Otherwise, ask the user for the path, or list `workspace/exports/*_enriched.json` and ask them to confirm which one if more than one exists.
+Otherwise, list `workspace/exports/*_enriched.json`. If there's more than one, use the AskUserQuestion tool, header `"Evidence file"`, one option per file (up to 4, most recent first if there are more, the tool's custom-answer option still lets the person name an older one directly) to ask which to use. If there's exactly one, just use it.
 
 ## 2. Ask for the bug target
 
-Tell the user how many commits are in the evidence file's `commits` array (its `enrichedCommitCount`), then ask directly, in plain text: how many genuine bug fixes would you like to find, at most? Call this the bug target. Accept whatever number they give.
+Tell the user how many commits are in the evidence file's `commits` array (its `enrichedCommitCount`). Then use the AskUserQuestion tool, header `"Bug target"`, to ask how many genuine bug fixes they'd like to find, at most (call this the bug target). Build 3 preset options scaled to `enrichedCommitCount` (e.g. roughly a fifth, roughly half, and all of them, capped at something reasonable if the count is large), the same way `/inspect_repo`'s scan-limit question scales its own presets. The tool's automatic custom-answer option covers any exact number.
 
 This is a different question from the scan commit limit asked back in `/inspect_repo`. That one bounded how many raw commits got looked at closely. This one bounds how many of those, once actually classified, should count as accepted results.
 

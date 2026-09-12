@@ -56,9 +56,14 @@ class SearchReposSpec extends FunSuite:
     val q = SearchRepos.buildQualifiers(
       language = Some("Java"),
       minStars = Some(1000),
+      maxStars = Some(50000),
       pushedSinceDate = Some("2026-03-01"),
       minSizeKb = Some(100),
       maxSizeKb = Some(5000),
+      minForks = Some(10),
+      maxForks = Some(500),
+      createdAfterDate = Some("2020-01-01"),
+      createdBeforeDate = Some("2024-01-01"),
       forkStatus = Some("false"),
       archivedStatus = Some("false"),
       topics = List("json", "parser"),
@@ -66,17 +71,41 @@ class SearchReposSpec extends FunSuite:
     )
     assertEquals(
       q,
-      "language:Java stars:>=1000 pushed:>=2026-03-01 size:100..5000 fork:false archived:false topic:json topic:parser license:mit"
+      "language:Java stars:1000..50000 pushed:>=2026-03-01 size:100..5000 forks:10..500 created:2020-01-01..2024-01-01 fork:false archived:false topic:json topic:parser license:mit"
     )
   }
 
   test("buildQualifiers with no discriminators produces an empty string") {
-    assertEquals(SearchRepos.buildQualifiers(None, None, None, None, None, None, None, Nil, None), "")
+    assertEquals(SearchRepos.buildQualifiers(None, None, None, None, None, None, forkStatus = None, archivedStatus = None, topics = Nil, license = None), "")
   }
 
   test("buildQualifiers with only a minimum size uses a >= qualifier, not a range") {
-    val q = SearchRepos.buildQualifiers(None, None, None, Some(100), None, None, None, Nil, None)
+    val q = SearchRepos.buildQualifiers(None, None, None, None, Some(100), None, forkStatus = None, archivedStatus = None, topics = Nil, license = None)
     assertEquals(q, "size:>=100")
+  }
+
+  test("buildQualifiers with only a maximum stars uses a <= qualifier, not a range") {
+    val q = SearchRepos.buildQualifiers(None, None, Some(500), None, None, None, forkStatus = None, archivedStatus = None, topics = Nil, license = None)
+    assertEquals(q, "stars:<=500")
+  }
+
+  test("buildQualifiers with only a minimum forks count uses a >= qualifier, not a range") {
+    val q = SearchRepos.buildQualifiers(None, None, None, None, None, None, minForks = Some(50), forkStatus = None, archivedStatus = None, topics = Nil, license = None)
+    assertEquals(q, "forks:>=50")
+  }
+
+  test("buildQualifiers with only a maximum repo age uses a created:>= qualifier, not a range") {
+    // Max age resolves to a *lower* bound on the creation date (must have
+    // been created on or after that date to be no older than the max).
+    val q = SearchRepos.buildQualifiers(None, None, None, None, None, None, createdAfterDate = Some("2022-01-01"), forkStatus = None, archivedStatus = None, topics = Nil, license = None)
+    assertEquals(q, "created:>=2022-01-01")
+  }
+
+  test("buildQualifiers with only a minimum repo age uses a created:<= qualifier, not a range") {
+    // Min age resolves to an *upper* bound on the creation date (must have
+    // been created on or before that date to be at least that old).
+    val q = SearchRepos.buildQualifiers(None, None, None, None, None, None, createdBeforeDate = Some("2020-01-01"), forkStatus = None, archivedStatus = None, topics = Nil, license = None)
+    assertEquals(q, "created:<=2020-01-01")
   }
 
   test("storing the same discovered repo twice under the same search run does not duplicate rows") {
@@ -88,13 +117,14 @@ class SearchReposSpec extends FunSuite:
         runId = "search-A",
         language = Some("Java"),
         minStars = None,
+        maxStars = None,
         pushedWithinMonths = None,
         pushedSinceDate = None,
         minSizeKb = None,
         maxSizeKb = None,
         forkStatus = None,
         archivedStatus = None,
-        topics = Nil,
+        topicFilter = Nil,
         license = None,
         maxResults = 10,
         resultCount = 0
@@ -105,7 +135,7 @@ class SearchReposSpec extends FunSuite:
       SearchRepos.storeDiscoveredRepo(conn, runSurrogateId, item)
 
       assertEquals(count(conn, "SELECT COUNT(*) FROM repositories"), 1)
-      assertEquals(count(conn, "SELECT COUNT(*) FROM search_run_repositories"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM search_repos_run_repositories"), 1)
     finally conn.close()
   }
 
@@ -123,11 +153,12 @@ class SearchReposSpec extends FunSuite:
         None,
         None,
         None,
-        None,
-        Nil,
-        None,
-        10,
-        0
+        forkStatus = None,
+        archivedStatus = None,
+        topicFilter = Nil,
+        license = None,
+        maxResults = 10,
+        resultCount = 0
       )
       val runB = SearchRepos.upsertSearchRepoRun(
         conn,
@@ -139,11 +170,12 @@ class SearchReposSpec extends FunSuite:
         None,
         None,
         None,
-        None,
-        Nil,
-        None,
-        10,
-        0
+        forkStatus = None,
+        archivedStatus = None,
+        topicFilter = Nil,
+        license = None,
+        maxResults = 10,
+        resultCount = 0
       )
 
       // The same repository, but its star count grew between the two
@@ -153,8 +185,8 @@ class SearchReposSpec extends FunSuite:
       SearchRepos.storeDiscoveredRepo(conn, runB, searchItem("acme/widgets", stars = 1200, language = "Java", pushedAt = "2026-08-01T00:00:00Z", sizeKb = 1000))
 
       assertEquals(count(conn, "SELECT COUNT(*) FROM repositories"), 1)
-      assertEquals(count(conn, "SELECT COUNT(*) FROM search_run_repositories"), 2)
-      assertEquals(count(conn, "SELECT COUNT(*) FROM search_run_repositories WHERE search_repos_run_id = " + runA + " AND stars = 500"), 1)
-      assertEquals(count(conn, "SELECT COUNT(*) FROM search_run_repositories WHERE search_repos_run_id = " + runB + " AND stars = 1200"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM search_repos_run_repositories"), 2)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM search_repos_run_repositories WHERE search_repos_run_id = " + runA + " AND stars = 500"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM search_repos_run_repositories WHERE search_repos_run_id = " + runB + " AND stars = 1200"), 1)
     finally conn.close()
   }

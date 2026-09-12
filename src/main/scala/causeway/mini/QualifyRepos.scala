@@ -15,10 +15,11 @@ import java.time.{Duration as JDuration, Instant}
   * commit-to-issue evidence the rest of the pipeline looks for, no matter
   * how it's mined, so there's no reason to pay for a clone to find that
   * out. Everything here comes from a handful of GitHub API calls: repo
-  * metadata, two search-API existence counts, and one recursive tree
-  * listing (paths only, no file content, no clone) pattern-matched for
-  * test-like paths. Fully mechanical, no judgment calls, hence a plain
-  * CLI subcommand rather than something routed through an agent.
+  * metadata, four search-API existence counts (closed/open issues,
+  * merged/open PRs), and one recursive tree listing (paths only, no file
+  * content, no clone) pattern-matched for test-like paths. Fully
+  * mechanical, no judgment calls, hence a plain CLI subcommand rather than
+  * something routed through an agent.
   */
 object QualifyRepos:
 
@@ -26,15 +27,30 @@ object QualifyRepos:
   private val DbPath = "workspace/causeway.db"
 
   /** The outcome of qualifying one repository. `qualifies` is decided by
-    * [[decideQualification]]; `appearsToHaveTests` is a soft heuristic
-    * signal (see [[detectTestEvidence]]) that is recorded but never on its
-    * own fails a repository.
+    * [[decideQualification]] from `hasIssues`/`closedIssueCount`/
+    * `mergedPrCount` alone; `openIssueCount`, `openPrCount`, and
+    * `testFileCount` (see [[detectTestEvidence]]) are richer activity
+    * signals recorded for context but never affect `qualifies` themselves.
     */
   private[mini] case class QualificationResult(
+      htmlUrl: String,
+      description: Option[String],
+      repoCreatedAt: Option[String],
+      forksCount: Option[Int],
+      topics: List[String],
+      defaultBranch: String,
+      currentStars: Option[Int],
+      currentLanguage: Option[String],
+      currentSizeKb: Option[Int],
+      currentArchived: Option[Boolean],
+      currentFork: Option[Boolean],
+      currentLicense: Option[String],
       hasIssues: Boolean,
       closedIssueCount: Int,
+      openIssueCount: Int,
       mergedPrCount: Int,
-      appearsToHaveTests: Boolean,
+      openPrCount: Int,
+      testFileCount: Int,
       testEvidencePaths: List[String],
       treeTruncated: Boolean,
       qualifies: Boolean,
@@ -74,10 +90,33 @@ object QualifyRepos:
 
       targets.foreach { case (owner, repo, repositoryId) =>
         val result = evaluateRepository(owner, repo, token)
+        // Fill in identity fields too, in case this repo was never
+        // discovered via search-repos (the --owner/--repo direct path) and
+        // so has none of them yet; COALESCE-preserved, so this never
+        // clobbers a richer value search-repos already recorded.
+        Store.upsertRepository(
+          conn,
+          owner,
+          repo,
+          result.htmlUrl,
+          description = result.description,
+          repoCreatedAt = result.repoCreatedAt,
+          forksCount = result.forksCount,
+          topics = result.topics,
+          defaultBranch = Some(result.defaultBranch),
+          currentStars = result.currentStars,
+          currentLanguage = result.currentLanguage,
+          currentSizeKb = result.currentSizeKb,
+          currentArchived = result.currentArchived,
+          currentFork = result.currentFork,
+          currentLicense = result.currentLicense
+        )
         upsertQualification(conn, repositoryId, result)
         if result.qualifies then qualifiedCount += 1 else rejectedCount += 1
         println(
-          s"QUALIFY owner=$owner repo=$repo qualifies=${result.qualifies}" +
+          s"QUALIFY owner=$owner repo=$repo qualifies=${result.qualifies} " +
+            s"closedIssues=${result.closedIssueCount} openIssues=${result.openIssueCount} " +
+            s"mergedPrs=${result.mergedPrCount} openPrs=${result.openPrCount} testFiles=${result.testFileCount}" +
             result.rejectionReason.map(r => s" reason=\"$r\"").getOrElse("")
         )
       }
@@ -95,7 +134,7 @@ object QualifyRepos:
 
   private def repositoriesFromSearchRun(conn: Connection, runId: String): List[(String, String, Long)] =
     val ps = conn.prepareStatement(
-      "SELECT r.owner, r.repo, r.id FROM search_run_repositories srr " +
+      "SELECT r.owner, r.repo, r.id FROM search_repos_run_repositories srr " +
         "JOIN search_repos_runs sr ON sr.id = srr.search_repos_run_id " +
         "JOIN repositories r ON r.id = srr.repository_id " +
         "WHERE sr.run_id = ?"
@@ -117,8 +156,29 @@ object QualifyRepos:
     val hasIssues = metadata("has_issues").bool
     val defaultBranch = metadata("default_branch").str
 
+    // Stable identity-ish fields, in the same response, so qualify-repos
+    // can fill these in on `repositories` even for a repo that was never
+    // discovered via search-repos (the --owner/--repo direct path).
+    val description = metadata.obj.get("description").filterNot(_ == ujson.Null).map(_.str)
+    val repoCreatedAt = metadata.obj.get("created_at").filterNot(_ == ujson.Null).map(_.str)
+    val forksCount = metadata.obj.get("forks_count").map(_.num.toInt)
+    val topics = metadata.obj.get("topics").map(_.arr.toList.map(_.str)).getOrElse(Nil)
+
+    // This call's own point-in-time snapshot (stars/language/size/etc.),
+    // fed into the shared `current_*` columns on `repositories`,
+    // deliberately separate from search_repos_run_repositories' per-search
+    // history, see schema.sql's comment on `repositories` for why.
+    val currentStars = metadata.obj.get("stargazers_count").map(_.num.toInt)
+    val currentLanguage = metadata.obj.get("language").filterNot(_ == ujson.Null).map(_.str)
+    val currentSizeKb = metadata.obj.get("size").map(_.num.toInt)
+    val currentArchived = metadata.obj.get("archived").map(_.bool)
+    val currentFork = metadata.obj.get("fork").map(_.bool)
+    val currentLicense = metadata.obj.get("license").filterNot(_ == ujson.Null).flatMap(_.obj.get("spdx_id")).filterNot(_ == ujson.Null).map(_.str)
+
     val closedIssueCount = searchTotalCount(owner, repo, "type:issue state:closed", token)
+    val openIssueCount = searchTotalCount(owner, repo, "type:issue state:open", token)
     val mergedPrCount = searchTotalCount(owner, repo, "type:pr is:merged", token)
+    val openPrCount = searchTotalCount(owner, repo, "type:pr state:open", token)
 
     val treeJson = ujson.read(httpGet(s"$ApiBase/repos/$owner/$repo/git/trees/${URLEncoder.encode(defaultBranch, StandardCharsets.UTF_8)}?recursive=1", token))
     val truncated = treeJson.obj.get("truncated").exists(_.bool)
@@ -128,10 +188,26 @@ object QualifyRepos:
     val (qualifies, reason) = decideQualification(hasIssues, closedIssueCount, mergedPrCount)
 
     QualificationResult(
+      htmlUrl = metadata("html_url").str,
+      description = description,
+      repoCreatedAt = repoCreatedAt,
+      forksCount = forksCount,
+      topics = topics,
+      defaultBranch = defaultBranch,
+      currentStars = currentStars,
+      currentLanguage = currentLanguage,
+      currentSizeKb = currentSizeKb,
+      currentArchived = currentArchived,
+      currentFork = currentFork,
+      currentLicense = currentLicense,
       hasIssues = hasIssues,
       closedIssueCount = closedIssueCount,
+      openIssueCount = openIssueCount,
       mergedPrCount = mergedPrCount,
-      appearsToHaveTests = testEvidence.nonEmpty,
+      openPrCount = openPrCount,
+      // The true count, not capped, testEvidencePaths (a sample for
+      // storage/display) is capped separately below.
+      testFileCount = testEvidence.size,
       testEvidencePaths = testEvidence.take(5),
       treeTruncated = truncated,
       qualifies = qualifies,
@@ -197,28 +273,40 @@ object QualifyRepos:
   // Database write
   // ---------------------------------------------------------------------
 
+  /** Qualification columns live directly on `repositories` (see
+    * `schema.sql`), a plain `UPDATE` by id, not an upsert: the row itself
+    * is always already there by the time this runs (found via a search, or
+    * created outright by the `--owner`/`--repo` path in `run` above), only
+    * these columns are new information.
+    */
   private[mini] def upsertQualification(conn: Connection, repositoryId: Long, result: QualificationResult): Unit =
+    // No qualifies column: it would always be exactly `rejection_reason IS
+    // NULL`, storing both would be pure redundancy. "Qualifies" is a query
+    // condition, computed where needed, not a persisted fact.
+    //
+    // No current_* columns here either: those are written by the shared
+    // `Store.upsertRepository` call above (the single source of truth both
+    // `search-repos` and `qualify-repos` feed), setting them again here
+    // would just be a second, easy-to-forget place to keep in sync.
     Store.exec(
       conn,
-      "INSERT INTO repository_qualifications " +
-        "(repository_id, has_issues, closed_issue_count, merged_pr_count, appears_to_have_tests, test_evidence_paths, tree_truncated, qualifies, rejection_reason, checked_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-        "ON CONFLICT(repository_id) DO UPDATE SET " +
-        "has_issues = excluded.has_issues, closed_issue_count = excluded.closed_issue_count, " +
-        "merged_pr_count = excluded.merged_pr_count, appears_to_have_tests = excluded.appears_to_have_tests, " +
-        "test_evidence_paths = excluded.test_evidence_paths, tree_truncated = excluded.tree_truncated, " +
-        "qualifies = excluded.qualifies, rejection_reason = excluded.rejection_reason, checked_at = excluded.checked_at",
+      "UPDATE repositories SET " +
+        "has_issues = ?, closed_issue_count = ?, open_issue_count = ?, merged_pr_count = ?, open_pr_count = ?, " +
+        "test_file_count = ?, test_evidence_paths = ?, tree_truncated = ?, " +
+        "rejection_reason = ?, checked_at = ? " +
+        "WHERE id = ?",
       Seq(
-        repositoryId,
         result.hasIssues,
         result.closedIssueCount,
+        result.openIssueCount,
         result.mergedPrCount,
-        result.appearsToHaveTests,
+        result.openPrCount,
+        result.testFileCount,
         if result.testEvidencePaths.isEmpty then null else result.testEvidencePaths.mkString(","),
         result.treeTruncated,
-        result.qualifies,
         result.rejectionReason.orNull,
-        Instant.now().toString
+        Instant.now().toString,
+        repositoryId
       )
     )
 

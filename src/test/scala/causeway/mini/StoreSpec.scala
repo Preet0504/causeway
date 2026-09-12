@@ -10,7 +10,7 @@ import java.sql.{Connection, DriverManager}
   * the same run twice must not create duplicate rows, and storing two
   * different runs (different runId, different window) against the same
   * repository must reuse the one `repositories` row while keeping each
-  * run's own commit membership separate in `run_commits`. This is exactly
+  * run's own commit membership separate in `inspect_repo_run_commits`. This is exactly
   * the scenario raised when designing this feature: mining the same repo
   * twice with different windows must not corrupt or merge the two runs.
   */
@@ -44,8 +44,6 @@ class StoreSpec extends FunSuite:
           "sha" -> sha,
           "shortMessage" -> s"commit $sha",
           "fullMessage" -> s"commit $sha\n\nbody",
-          "author" -> ujson.Obj("name" -> "Ada", "email" -> "ada@example.com", "date" -> "2026-08-01T00:00:00Z"),
-          "committer" -> ujson.Obj("name" -> "Ada", "email" -> "ada@example.com", "date" -> "2026-08-01T00:00:00Z"),
           "commitDate" -> "2026-08-01T00:00:00Z",
           "parentShas" -> List.empty[String]
         )
@@ -70,7 +68,7 @@ class StoreSpec extends FunSuite:
       assertEquals(count(conn, "SELECT COUNT(*) FROM repositories"), 1)
       assertEquals(count(conn, "SELECT COUNT(*) FROM inspect_repo_runs"), 1)
       assertEquals(count(conn, "SELECT COUNT(*) FROM commits"), 2)
-      assertEquals(count(conn, "SELECT COUNT(*) FROM run_commits"), 2)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM inspect_repo_run_commits"), 2)
     finally conn.close()
   }
 
@@ -95,16 +93,16 @@ class StoreSpec extends FunSuite:
       // sha2 is the same commit row in both runs, not duplicated.
       assertEquals(count(conn, "SELECT COUNT(*) FROM commits"), 3)
 
-      // But run_commits must record BOTH runs' membership for sha2, a bare
+      // But inspect_repo_run_commits must record BOTH runs' membership for sha2, a bare
       // column here (instead of a join table) would let the second run's
       // write silently clobber the first run's membership record.
-      assertEquals(count(conn, "SELECT COUNT(*) FROM run_commits"), 4)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM inspect_repo_run_commits"), 4)
       assertEquals(
-        count(conn, "SELECT COUNT(*) FROM run_commits rc JOIN inspect_repo_runs r ON r.id = rc.inspect_repo_run_id WHERE r.run_id = 'run-A'"),
+        count(conn, "SELECT COUNT(*) FROM inspect_repo_run_commits rc JOIN inspect_repo_runs r ON r.id = rc.inspect_repo_run_id WHERE r.run_id = 'run-A'"),
         2
       )
       assertEquals(
-        count(conn, "SELECT COUNT(*) FROM run_commits rc JOIN inspect_repo_runs r ON r.id = rc.inspect_repo_run_id WHERE r.run_id = 'run-B'"),
+        count(conn, "SELECT COUNT(*) FROM inspect_repo_run_commits rc JOIN inspect_repo_runs r ON r.id = rc.inspect_repo_run_id WHERE r.run_id = 'run-B'"),
         2
       )
     finally conn.close()

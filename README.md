@@ -6,103 +6,119 @@ Causeway Mini looks through a public GitHub project's history and figures out wh
 
 You point it at a repo, tell it how far back in time to look, and it works through the history in stages. It finds the candidate commits, digs up extra context about each one from GitHub (was there a bug report, a pull request discussion), looks at the actual code that changed, and then has a few independent AI reviewers weigh in before settling on a final answer for each commit, stopping once it has found as many genuine bug fixes as you asked for. If you don't already know which repo you want, you can also describe what you're looking for in plain language (language, popularity, activity, and so on) and it searches GitHub for candidates first.
 
-Everything is run through a handful of chat commands, typed one after another, each one picking up where the last left off.
+Everything is run through a handful of chat commands, typed one after another, each one picking up where the last left off. `/run_causeway` runs the whole thing in one command; `/inspect_repo`, `/inspect_commits`, and `/classify_bugs` run the same three stages one at a time, for when you'd rather stop and look between them.
 
 ## Tech stack
 
 - **Scala 3**: the programming language the actual data-processing tools are written in.
 - **sbt 2**: the build tool that compiles and runs the Scala code.
-- **JGit**: a library that lets the Scala code read a git repository's history and compute diffs directly, without needing the `git` command line tool installed separately.
-- **GitHub GraphQL API**: used to fetch the pull requests and issues linked to a commit, straight from GitHub, rather than guessing from the commit message alone.
-- **GitHub REST search API**: used to find candidate repositories from structured criteria (language, stars, activity, and so on), separately from the GraphQL API used once a specific repo is already chosen.
-- **upickle/ujson**: a small library for reading and writing the JSON files this project passes between its stages.
-- **SQLite (via the `sqlite-jdbc` driver)**: a repository catalog, `workspace/causeway.db`, that every stage's output gets stored into (either from its own JSON file, or directly as it's produced for the two stages that don't write one), so the data can be queried directly (which commits, across every run ever done, are linked to a given issue?) instead of only ever being read one JSON file at a time.
-- **Claude Code commands and subagents**: the chat commands (`/run_causeway`, etc.) and the AI reviewers are plain instruction files that Claude Code reads and follows, no extra framework needed.
-- **The `causeway` CLI**: a small launcher script that runs the compiled Scala tools directly, no `sbt` involved at invocation time. sbt is still what compiles the code, the launcher just stops the chat commands from needing to go through sbt's build-tool machinery on every single call.
+- **JGit**: reads a git repository's history and computes diffs directly, without needing the `git` command line tool installed separately.
+- **GitHub GraphQL API**: fetches the pull requests and issues linked to a commit.
+- **GitHub REST search API**: finds candidate repositories from structured criteria (language, stars, activity, and so on).
+- **upickle/ujson**: reads and writes the JSON files passed between stages.
+- **SQLite (via the `sqlite-jdbc` driver)**: a repository catalog, `workspace/causeway.db`, that every stage's output also gets stored into, queryable directly across every run ever done.
+- **Claude Code commands and subagents**: the chat commands (`/run_causeway`, etc.) and the AI reviewers are plain instruction files that Claude Code reads and follows.
+- **The `causeway` CLI**: a small launcher script that runs the compiled Scala tools directly, no `sbt` involved at invocation time.
 
 ## Code files, and what they actually do
 
 ### `build.sbt` and `project/build.properties`
 
-These two files are the project's setup. `build.sbt` says this is a Scala 3 project, lists the outside libraries it needs (JGit, upickle, the `sqlite-jdbc` driver, and MUnit for tests), and turns on a compiler warning flag. `project/build.properties` pins the exact version of sbt to use, so the build behaves the same on any machine.
+`build.sbt` declares this as a Scala 3 project and lists its dependencies (JGit, upickle, `sqlite-jdbc`, MUnit for tests). `project/build.properties` pins the sbt version.
 
 ### `src/main/scala/causeway/mini/Causeway.scala`
 
-The single compiled entry point for everything. Rather than each tool having its own `main` (which is how `sbt runMain causeway.mini.InspectRepo` used to work, and why sbt kept complaining about "multiple main classes"), this is the only class with a real `main`, and it dispatches on the first argument, `search-repos`, `qualify-repos`, `inspect-repo`, `inspect-commits`, `store`, to that capability's own logic. Adding a new capability later means adding one case here, the capability itself doesn't need to know it's part of a CLI.
+The one compiled entry point. Dispatches on its first argument (`search-repos`, `qualify-repos`, `list-qualifying-repos`, `repo-details`, `inspect-repo`, `inspect-commits`, `store`) to that capability's own `run`.
 
 ### `tools/causeway`
 
-The launcher script the chat commands actually call: `tools/causeway inspect-repo --mode list-remotes ...`. It runs `java` directly against already-compiled classes and a cached classpath, no `sbt` involved. The first time it's run after a source file or `build.sbt` changes, it notices (by comparing file timestamps against its cache), recompiles once, and refreshes the cache automatically, every other invocation just runs, typically under a second of pure JVM startup instead of sbt's several-second build-server round trip. It also sources `.env` itself, before running anything, so `GITHUB_TOKEN` is always available to whichever subcommand needs it, no chat command instructions have to prepare it (or make a raw network call of their own) beforehand.
+The launcher script the chat commands call, e.g. `tools/causeway inspect-repo --mode list-remotes ...`. Runs already-compiled classes directly; recompiles automatically the first time it's invoked after a source or `build.sbt` change. Also sources `.env` itself before running anything, so `GITHUB_TOKEN` is always available.
 
 ### `src/main/scala/causeway/mini/SearchRepos.scala`
 
-This is the tool behind the `search-repos` subcommand, for when you don't already know which repo you want. It takes structured flags (language, minimum stars, how recently active, size, fork/archived status, topics, license, and a result cap), builds them into GitHub's repository search qualifier syntax, and pages through results (100 at a time, GitHub's own maximum, up to its overall 1000-result ceiling regardless of what's asked for). Unlike the other three pipeline tools, it writes no JSON file: every discovered repository is inserted straight into `workspace/causeway.db` as it's found, tagged with the exact search specification (as a `search_repos_runs` row) that discovered it, so results are traceable back to precisely what was searched for even without a JSON file to point to. It does not do the job of turning a person's plain-language request ("popular, actively-maintained Java repos") into these flags, that translation is the `repo-discovery` agent's job, this tool only ever does exactly what its flags say.
+The `search-repos` subcommand. Takes structured flags (language, a star range, how recently active, a size range, a fork-count range, a repo-age range, fork/archived status, topics, license, a result cap), builds them into GitHub's repository search qualifier syntax, and pages through results (100 at a time, up to GitHub's 1000-result ceiling). Every discovered repository is inserted straight into `workspace/causeway.db` as it's found, tagged with the exact search specification (a `search_repos_runs` row) that discovered it. Translating a person's plain-language request into these flags is the `repo-discovery` agent's job, not this tool's.
 
 ### `src/main/scala/causeway/mini/QualifyRepos.scala`
 
-This is the tool behind the `qualify-repos` subcommand, a cheap pre-clone check that runs on whatever `search-repos` just found. Cloning a repository (what `/inspect_repo` does) is the expensive step in this whole pipeline, so before anything gets to that point, this asks GitHub a handful of cheap questions about a repository instead: are issues even enabled (`has_issues` from the repo's own metadata), has it ever had a closed issue or a merged pull request (two calls to GitHub's search API, only the result counts are needed, not the actual items), and does its file tree look like it contains tests (one recursive tree listing, paths only, no file content, pattern-matched against common test-file conventions across several languages). A repository with issues disabled, or with no closed issue and no merged PR ever, is rejected outright, there's no way that repository could ever produce the kind of commit-to-issue evidence this pipeline looks for. Whether it appears to have tests is recorded but never causes a rejection by itself, it's a soft, pattern-matched heuristic that can easily miss real tests living somewhere it doesn't recognize. This check is fully mechanical (fixed thresholds, no language-model judgment involved), so it's invoked directly, not through an agent.
+The `qualify-repos` subcommand: a cheap pre-clone check on whatever `search-repos` just found. Asks GitHub whether issues are enabled, how many closed/open issues and merged/open pull requests exist, and how many files in the repo's tree look like tests (a recursive tree listing, paths only, pattern-matched against common test-file conventions). Issues disabled, or zero closed issues and zero merged PRs, rejects the repository outright; everything else is recorded but never causes a rejection on its own. Fully mechanical, invoked directly rather than through an agent. The same metadata call also captures `description`/`repo_created_at`/`forks_count`/`topics`/`default_branch` and the `current_stars`/`current_language`/`current_size_kb`/`current_archived`/`current_fork`/`current_license` snapshot, both fed into `repositories` through the same shared upsert `search-repos` uses.
+
+### `src/main/scala/causeway/mini/ListQualifyingRepos.scala`
+
+The `list-qualifying-repos` subcommand: a pure database read. Lists every repository that currently qualifies, most-starred first, up to a given `--limit`, with its issue/PR/test-file counts and whether it's already been mined. Deliberately lean output; `RepoDetails` below is the fuller picture for one chosen repo.
+
+### `src/main/scala/causeway/mini/RepoDetails.scala`
+
+The `repo-details` subcommand: another pure database read, for one repository at a time — its description, topics, license, creation date, and current archived/fork status. Shown once someone actually picks a repository to mine, not for every candidate in a results table.
 
 ### `src/main/scala/causeway/mini/InspectRepo.scala`
 
-This is the tool behind the `inspect-repo` subcommand. It doesn't auto-detect which remote or which branch to use, a repo URL alone doesn't define that, a clone can have more than one remote (a fork's `origin` pointing at the fork, `upstream` at the original), and the "default" branch isn't necessarily the one worth mining. Instead it runs as one of five modes, each a separate invocation, so the orchestrator can show real options to the user between them:
+The `inspect-repo` subcommand. Runs as one of four modes, each a separate invocation, so an orchestrator can show real options to the user between them:
 
-1. **`validate`**, given just a repo URL: checks whether it names a real GitHub repository (`VALID=true`/`VALID=false`), nothing is cloned. This is the network call `/run_causeway` used to make itself directly, with a raw `curl`, before GitHub access was centralized into this CLI.
-2. **`list-remotes`**: downloads the repo with JGit if it hasn't already been downloaded, or opens the existing copy if it has, then prints every remote actually configured there, name and URL. Nothing is fetched yet.
-3. **`list-branches`**, given a chosen remote name: fetches from that remote (a repo's default branch moves, so a reused local copy would otherwise silently serve whatever it looked like last time this tool touched it), reads that remote's own configured URL, and asks GitHub's REST API for every branch on that repository, each with its current commit SHA, flagging whichever one GitHub calls the default.
-4. **`count`**, given a chosen remote, branch, and its exact SHA (from step 3's output): walks backward through commit history starting from that exact pinned commit, checking every commit's timestamp individually rather than assuming they only get older the further back it goes (a real Git history isn't guaranteed to be ordered that way, clock skew and rebases can produce a commit whose timestamp is later than its own parent's), and just prints how many fall in the window. Writes nothing, this is a cheap preview.
-5. **`write`**, same inputs as `count` plus a scan commit limit: writes every commit it found, message, author, date, and so on, plus which remote, branch, and SHA were pinned, into a JSON file.
+1. **`list-remotes`**: clones the repo with JGit (or opens an existing local copy), then prints every remote actually configured there, name and URL. This is also where a bad repo URL is caught, cloning simply fails.
+2. **`list-branches`**, given a chosen remote name: fetches from that remote and asks GitHub's REST API for every branch on that repository, each with its current commit SHA, flagging whichever one GitHub calls the default.
+3. **`count`**, given a chosen remote, branch, and its exact SHA: walks every commit reachable from that pinned commit, checking each one's timestamp individually, and prints how many fall in the window. Writes nothing.
+4. **`write`**, same inputs as `count` plus a scan commit limit: writes every commit in the window (sha, short/full message, commit date, parent shas), plus the chosen remote/branch/SHA, to a JSON evidence file.
 
-Every mode that talks to GitHub does so with `GITHUB_TOKEN` (better rate limits than an unauthenticated call), which it reads from its own process environment, populated by `tools/causeway` sourcing `.env` before this tool ever runs.
-
-`count` and `write` never re-fetch or re-resolve the SHA they're given, they trust it outright, since that SHA is the exact thing a person already chose in step 3. Re-checking it against whatever's newest at that later moment would silently defeat the point of pinning.
+`count` and `write` trust the given `--branch-sha` outright, they don't re-fetch or re-resolve it.
 
 ### `src/main/scala/causeway/mini/EnrichCommits.scala`
 
-This is the tool behind the `inspect-commits` subcommand. Internally it:
+The `inspect-commits` subcommand:
 
-1. Reads the JSON file that `InspectRepo` produced.
-2. Takes only as many commits as the scan commit limit allows (the most recent ones).
-3. Asks GitHub's GraphQL API for the pull requests linked to those commits (and, for each PR, its own commit list, and which issues it closes), grouping up to 20 commits into a single request instead of sending one request per commit.
-4. For every issue discovered that way, asks a second batched GraphQL query for that issue's own timeline (which commits GitHub itself confirms referenced it, which pull requests cross-reference it) and body text.
-5. For every commit that isn't a merge commit, computes the exact before and after code using JGit, running several of these comparisons at once instead of one at a time.
-6. Skips the code comparison for merge commits, since a merge doesn't have one clean "before and after" to point to.
-7. Combines all of this into a new JSON file, leaving the original file from step 2 untouched. This file only fetches the raw data, `Store.scala` is what turns it into the typed relations described below.
+1. Reads the evidence file `InspectRepo` produced.
+2. Takes only as many commits as the scan commit limit allows.
+3. Asks GitHub's GraphQL API for the pull requests linked to those commits (and each PR's own commit list and closed issues), batching up to 20 commits per request.
+4. For every issue discovered that way, asks a second batched query for that issue's own timeline and body text.
+5. For every non-merge commit, computes the before/after code diff using JGit.
+6. Skips merge commits, they have no single "before and after" to diff against.
+7. Writes a new JSON file with all of this added, leaving the original untouched.
 
 ### `src/main/resources/schema.sql`
 
-The SQLite schema for the repository catalog: repositories, repository snapshots, one run table per pipeline stage (`search_repos_runs`, `inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`), a `search_run_repositories` join table (a discovered repository's stars/language/activity/etc. at the moment a particular search found it, mirroring `run_commits`'s "the same thing can be rediscovered by a different run" design), a `repository_qualifications` table (one current row per repository, re-checking replaces it rather than layering history, since only the latest answer to "is this worth cloning" matters), commits, commit parents, a `run_commits` join table, pull requests, issues, a typed `relations` table (a `relation_type` column distinguishes, for example, a commit belonging to a PR from that PR closing an issue, rather than collapsing every commit/PR/issue connection into one generic fact, see "How a commit connects to a PR or an issue" below), and bug classifications, plus three empty stub tables (`test_observations`, `materialized_revisions`, `build_runs`) reserved for capabilities that don't exist yet. Every table with a natural key (a repo's `owner`+`repo`, a run's `run_id`, a commit's `sha`) is meant to be upserted into, never plain-inserted.
+The SQLite schema, organized into two kinds of table, distinguishable by name alone:
+
+- **Run tables** (`search_repos_runs`, `inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`): one row per invocation of a pipeline stage, recording exactly what was asked for. Always end in `_runs`.
+- **Catalog tables** (everything else — `repositories`, `repository_snapshots`, `commits`, `pull_requests`, `issues`, `relations`, `bug_classifications`, plus each run table's own membership/snapshot join table): the actual discovered facts. A run's membership table is named after its run table plus what it links, so it's traceable at a glance: `inspect_repo_run_commits` (which commits an `inspect_repo_runs` row touched) and `search_repos_run_repositories` (which repositories a `search_repos_runs` row found).
+
+`repositories` carries qualification data (`has_issues` through `checked_at`) directly as nullable columns, `NULL` until `qualify-repos` checks a repository. There's no separate `qualifies` boolean; "qualifies" is the query condition `checked_at IS NOT NULL AND rejection_reason IS NULL`. It also carries `description`/`repo_created_at`/`forks_count`/`topics`/`default_branch` (populated by whichever tool sees a repository first) and `current_stars`/`current_language`/`current_size_kb`/`current_archived`/`current_fork`/`current_license` (the single "what does this repository currently look like" snapshot, written by both `search-repos` and `qualify-repos` every time either one sees a repository). `search_repos_run_repositories` separately keeps its own per-search historical snapshot (what a repo looked like at the moment each search found it).
+
+`relations` is a typed edge table: a `relation_type` column says whether a row is, for example, a commit belonging to a PR or that PR closing an issue, rather than one generic "this commit relates to this issue" fact (see "How a commit connects to a PR or an issue" below). Indexed on each of its three endpoint columns.
 
 ### `src/main/scala/causeway/mini/Store.scala`
 
-This is the tool behind the `store` subcommand. It takes any one JSON file any of the three pipeline stages produced, figures out which of the three it is by which fields are present (no separate flag needed), and upserts its contents into `workspace/causeway.db`. Storing the same file twice, or storing two different runs against the same repository, updates or reuses existing rows rather than creating duplicates, one run mining the same repo with a different time window than an earlier run doesn't get merged with it or corrupt it, both runs' results sit side by side, sharing only the one `repositories` row underneath. This is additive alongside the JSON files, not a replacement for them, `/inspect_commits` and `/classify_bugs` still read the previous stage's JSON file directly and in full.
+The `store` subcommand. Takes any JSON file one of the three pipeline stages produced, detects which of the three it is by which fields are present, and upserts its contents into `workspace/causeway.db`. Storing the same file twice, or storing two different runs against the same repository, updates or reuses existing rows rather than duplicating.
 
 ### `.claude/agents/repo-discovery.md`
 
-The instructions given to the repository discovery agent. It has access to exactly one tool, Bash, and is told, explicitly, to use it for exactly one purpose: running `tools/causeway search-repos ...`. No `curl`, no `git clone`, no writing to the database directly, no classifying commits, no builds, those are all other tools' and agents' jobs. Its own job is entirely translation: turning a plain-language description ("popular, actively-maintained Java repos") into the tool's structured flags, filling in only what the description actually implies, and asking rather than guessing at a number when "popular" or "small" isn't given a concrete threshold.
+The repository discovery agent's instructions. Has access to exactly one tool, Bash, used for exactly one purpose: running `tools/causeway search-repos ...`. Its job is translation: turning a plain-language description into the tool's structured flags, asking rather than guessing at a number when a threshold isn't given.
 
 ### `.claude/commands/discover_repos.md`
 
-Instructions that say: ask what kind of repository the user is looking for, in plain language, and how many candidates they want, hand that straight to the `repo-discovery` agent (the command itself never constructs search flags), then run `qualify-repos` directly (no agent involved, it's a fixed check, not a translation) on whatever was found before showing anything, so the results table already shows which candidates are worth pursuing and why the rest aren't, and offer to remember a chosen repo's URL for `/inspect_repo`. This is a separate, optional entry point, not a step in the middle of the usual flow, `/run_causeway` is still how you start once you already know exactly which repo you want.
+Asks what kind of repository the user is looking for and how many candidates they want, hands that to the `repo-discovery` agent, then runs `qualify-repos` directly on whatever was found before showing anything, and offers to remember a chosen repo's URL for `/inspect_repo` or `/run_causeway`.
+
+### `.claude/commands/list_qualifying_repos.md`
+
+Asks how many repositories to show, runs `list-qualifying-repos` directly, shows the results, and offers to remember a chosen repo's URL the same way `/discover_repos` does.
 
 ### `.claude/commands/run_causeway.md`
 
-Plain instructions for Claude to follow, not code. They say: ask the user for a repo URL, check it against GitHub directly, ask again (up to 3 times) if it isn't found, explain what a time window means, ask the user to choose one, and then point them to `/inspect_repo` next. It deliberately does not ask about limits or targets, those come later once there's something concrete to base them on.
+Runs the entire pipeline in one command: gathers the repo URL and window, discovers and picks a remote and branch, asks for a scan commit limit, writes and stores the evidence file, enriches and stores it, asks for a bug target, classifies commits, and writes and stores the final file — the same steps `/inspect_repo`, `/inspect_commits`, and `/classify_bugs` each do on their own, chained together without stopping in between.
 
 ### `.claude/commands/inspect_repo.md`
 
-Instructions that say: reuse the repo and time window from the previous command if they're already known, list the repo's configured remotes and let the user choose one (skipping the question if there's genuinely only one), list that remote's branches via GitHub and let the user choose one (the actual default branch is suggested), turn the chosen time window into an actual date, run the Scala tool once in preview mode to get a count, tell the user that count and ask for a scan commit limit, run the tool again for real, store the resulting evidence file into the SQLite catalog, and point them to `/inspect_commits` next. The scan commit limit question is phrased carefully to avoid the word "bug", since at this point nothing has been examined closely enough to know what's a bug fix and what isn't, this number only decides how many commits get that closer look.
+Gathers the repo URL and time window (reusing either one already known from earlier in the session), lists the repo's configured remotes and lets the user choose one, lists that remote's branches via GitHub and lets the user choose one, resolves the window to a date, previews the commit count, asks for a scan commit limit, writes the evidence file, and stores it.
 
 ### `.claude/commands/inspect_commits.md`
 
-Instructions that say: find the JSON file from the previous step, run the enrichment tool, store the resulting enriched file into the SQLite catalog, show a few example results, and point the user to `/classify_bugs` next. It doesn't load the GitHub access token itself, that's `tools/causeway`'s own job now.
+Finds the evidence file from the previous step, runs the enrichment tool, stores the resulting file, and shows a few example results.
 
 ### `.claude/commands/classify_bugs.md`
 
-Instructions that say: find the enriched JSON file, ask the user how many genuine bug fixes they want to find (the bug target), then work through the commits in groups of 5, one group at a time, sending each group to its own AI reviewer and judging the results as they come back. It stops as soon as enough genuine bug fixes have been found, or once every group has been checked, whichever comes first. It shows the user a table, writes one final JSON file with everything in it, and stores that file into the SQLite catalog too.
+Finds the enriched file, asks how many genuine bug fixes to find (the bug target), works through the commits in groups of 5, newest first, sending each group to its own AI reviewer and judging the results as they come back, stopping once the target is reached. Shows a table, writes the final file, and stores it.
 
 ### `.claude/agents/bug-classifier.md`
 
-The instructions given to each AI reviewer. They describe the three things to look at (commit message, code diff, linked pull requests or issues), how to score each one from 0.0 to 1.0 with a short explanation, and the exact reply format to use so the results can be read back automatically.
+Each AI reviewer's instructions: score a commit message, its code diff, and its linked pull requests/issues, each from 0.0 to 1.0 with a short explanation, in a fixed reply format.
 
 ## The commands, in order
 
@@ -110,160 +126,160 @@ Each command is typed into the chat, for example `/run_causeway`. Every command 
 
 ### 0. `/discover_repos` (optional, only if you don't already know which repo to mine)
 
-What happens, step by step:
+The command asks what kind of repository you're looking for, in plain language, and how many candidates you'd like at most. It hands that description to the `repo-discovery` agent, which translates it into `search-repos`'s structured flags and runs it. Every result is inserted into `workspace/causeway.db` immediately. Before showing you anything, it runs `qualify-repos` on those same results directly.
 
-The command asks what kind of repository you're looking for, in plain language, giving a few examples of what you can mention (language, popularity, activity, size, forks, archived status, topics, license), and how many candidates you'd like at most. It hands that description straight to the `repo-discovery` agent, which translates it into `search-repos`'s structured flags and runs it, GitHub's repository search API does the actual finding. Every result is inserted into `workspace/causeway.db` immediately, tagged with the exact search that found it. Before showing you anything, it then runs `qualify-repos` on those same results directly (no agent involved, it's a fixed check): whether each one has issues enabled, has ever had a closed issue or merged PR, and whether its file tree looks like it contains tests, all without cloning anything.
-
-Example output:
+Real output, searching for small-to-mid JSON libraries in Java:
 
 ```
-What kind of repository are you looking for?
-(e.g. language, popularity, how actively maintained, size, forks,
-archived status, topics, license)
+$ tools/causeway search-repos --language Java --topics json --min-stars 1000 --max-results 5
+REPO owner=chinabugotech repo=hutool stars=30273 language=Java sizeKb=75368 url=https://github.com/chinabugotech/hutool
+REPO owner=opendataloader-project repo=opendataloader-pdf stars=29103 language=Java sizeKb=87739 url=https://github.com/opendataloader-project/opendataloader-pdf
+REPO owner=alibaba repo=fastjson stars=25594 language=Java sizeKb=15533 url=https://github.com/alibaba/fastjson
+REPO owner=redisson repo=redisson stars=24392 language=Java sizeKb=36918 url=https://github.com/redisson/redisson
+REPO owner=apple repo=pkl stars=11518 language=Java sizeKb=9159 url=https://github.com/apple/pkl
+SEARCH_RUN_ID=0ff90ebd-11f0-4bdc-9a3a-92a465f246b5
+RESULT_COUNT=5
+
+$ tools/causeway qualify-repos --search-run-id 0ff90ebd-11f0-4bdc-9a3a-92a465f246b5
+QUALIFY owner=chinabugotech repo=hutool qualifies=true closedIssues=3118 openIssues=2 mergedPrs=540 openPrs=0 testFiles=1038
+QUALIFY owner=opendataloader-project repo=opendataloader-pdf qualifies=true closedIssues=126 openIssues=66 mergedPrs=394 openPrs=27 testFiles=110
+QUALIFY owner=alibaba repo=fastjson qualifies=true closedIssues=1693 openIssues=1935 mergedPrs=418 openPrs=177 testFiles=3305
+QUALIFY owner=redisson repo=redisson qualifies=true closedIssues=5688 openIssues=184 mergedPrs=792 openPrs=65 testFiles=1085
+QUALIFY owner=apple repo=pkl qualifies=true closedIssues=267 openIssues=176 mergedPrs=886 openPrs=49 testFiles=5335
+QUALIFIED_COUNT=5
+REJECTED_COUNT=0
 ```
 
-You answer, say, "Small, actively-maintained JSON parsing libraries in Java, not forks, at most 10." Then:
+Picking `apple/pkl` and looking closer before committing to it:
 
 ```
-Searched with: language:Java topic:json pushed:>=2026-03-11 fork:false
-Found 6 of up to 10 candidates, 5 qualified:
-
-| repo                    | stars | language | qualifies | reason |
-|-------------------------|-------|----------|-----------|--------|
-| stleary/JSON-java       | 5400  | Java     | yes       |        |
-| some/quiet-fork         | 12    | Java     | no        | issues are disabled on this repository |
-| ...                     | ...   | ...      | ...       | |
-
-Would you like to mine one of these next? If so, run /inspect_repo
-(or /run_causeway to also pick a different time window), it'll use
-that repo directly. I'd suggest one of the 5 that qualified.
-
-If anything above is wrong, just run /discover_repos again to start over.
+$ tools/causeway repo-details --owner apple --repo pkl
+DESCRIPTION=A configuration as code language with rich validation and tooling.
+TOPICS=config,configuration,data,functional,java,json,kotlin,language,...
+FORKS_COUNT=403
+DEFAULT_BRANCH=main
+REPO_CREATED_AT=2024-01-19T17:28:45Z
+CURRENT_STARS=11518
+CURRENT_LANGUAGE=Java
+CURRENT_SIZE_KB=9159
+CURRENT_ARCHIVED=false
+CURRENT_FORK=false
+CURRENT_LICENSE=Apache-2.0
 ```
 
-### 1. `/run_causeway`
+### 0b. `/list_qualifying_repos` (optional, revisit repositories found by any past search)
 
-What happens, step by step:
+Asks how many results to show, then reads straight from `workspace/causeway.db`, no network call. Shows every repository currently marked qualifying, across every `/discover_repos` run ever done, most-starred first.
 
-The command asks: "What is the url of the repo?" You type a GitHub URL. It checks that URL against GitHub right away. If GitHub says the repo doesn't exist, it tells you plainly and asks again, up to 3 times before giving up. Once a real repo is found, it explains what a time window means (how much history to search through), then offers a few choices: past 1 month, past 3 months, past 6 months, or your own custom period. It does not ask about any limits or targets yet, those come later once there's something concrete to base them on.
-
-Example output, once a repo and window are settled:
+Real output, on a catalog that's accumulated 15 qualifying repositories across several past searches:
 
 ```
-Found the repo: stleary/JSON-java.
-Window: past 3 months (since 2026-06-05).
-
-Next, run /inspect_repo, which will clone the repo, show how many
-commits fall in this window, and ask for a scan commit limit at
-that point.
-
-If anything above is wrong, just run /run_causeway again to start over.
+$ tools/causeway list-qualifying-repos --limit 5
+REPO owner=chinabugotech repo=hutool stars=30273 language=Java sizeKb=75368 closedIssues=3118 openIssues=2 mergedPrs=540 openPrs=0 testFiles=1038 alreadyMined=false url=https://github.com/chinabugotech/hutool
+REPO owner=opendataloader-project repo=opendataloader-pdf stars=29103 language=Java sizeKb=87739 closedIssues=126 openIssues=66 mergedPrs=394 openPrs=27 testFiles=110 alreadyMined=false url=https://github.com/opendataloader-project/opendataloader-pdf
+REPO owner=alibaba repo=fastjson stars=25594 language=Java sizeKb=15533 closedIssues=1693 openIssues=1935 mergedPrs=418 openPrs=177 testFiles=3305 alreadyMined=false url=https://github.com/alibaba/fastjson
+REPO owner=redisson repo=redisson stars=24392 language=Java sizeKb=36918 closedIssues=5688 openIssues=184 mergedPrs=792 openPrs=65 testFiles=1085 alreadyMined=false url=https://github.com/redisson/redisson
+REPO owner=elastic repo=logstash stars=14940 language=Java sizeKb=135085 closedIssues=5151 openIssues=1992 mergedPrs=7239 openPrs=263 testFiles=785 alreadyMined=false url=https://github.com/elastic/logstash
+TOTAL_QUALIFYING=15
+SHOWN=5
 ```
 
-### 2. `/inspect_repo`
+### 1. `/run_causeway` — the whole pipeline in one command
 
-What happens, step by step:
+Asks for a repo URL (or reuses one already known), asks for a time window, discovers and picks a remote and branch, previews the commit count and asks for a scan commit limit, writes and stores the evidence file, enriches and stores it, asks for a bug target, classifies commits in batches, and writes and stores the final file — one continuous run, no stopping in between.
 
-It downloads the repo (or opens an already-downloaded copy), then lists every remote actually configured there. If there's only one, it just tells you and moves on, nothing to choose. If there's more than one, for example a fork with `origin` pointing at the fork and `upstream` pointing at the original project, it shows you all of them and asks which one to use, rather than guessing.
-
-Once a remote is settled, it fetches from it and lists every branch GitHub reports for that repository, pointing out which one GitHub calls the default, and asks which one you'd like to mine (the default, or any other by name). Only then does it count how many commits fall inside your chosen time window, as of that exact chosen branch, without writing anything yet, and shows you that number. It asks how many of those commits should be scanned in detail, being explicit that this is not about bugs yet, just about how many commits are worth a closer look. Once you answer, it writes out a JSON file listing every one of those commits, along with exactly which remote, branch, and commit were chosen, so the run's results are tied to a specific, recorded state of the repo rather than whatever it happens to look like if someone checks again later.
-
-Example output:
+Real output, mining `stleary/JSON-java`'s past 3 months:
 
 ```
-This repo has one remote configured: origin
-(https://github.com/stleary/JSON-java). Using that.
+What is the url of the repo? https://github.com/stleary/JSON-java
+How far back should Causeway Mini look for candidate bug-fixing commits? Past 3 months
 
-GitHub's default branch for this repo is "master". Which branch
-would you like to mine? (default: master)
+$ tools/causeway inspect-repo --repo-url https://github.com/stleary/JSON-java --mode list-remotes
+REMOTE name=origin url=https://github.com/stleary/JSON-java
+(only one remote, using it)
+
+$ tools/causeway inspect-repo --repo-url https://github.com/stleary/JSON-java --mode list-branches --remote-name origin
+BRANCH name=master sha=4f859fdf3b5669894c5ed8a305ee5cd5f1fe2b7a isDefault=true
+(...19 other branches...)
+(default branch accepted)
+
+$ tools/causeway inspect-repo ... --mode count --since-date 2026-06-12 --window-label past-3-months
+WINDOW_COMMIT_COUNT=28
+
+There are 28 commits in this window. How many should be scanned in detail? 6
+
+$ tools/causeway inspect-repo ... --mode write --scan-commit-limit 6
+WINDOW_COMMIT_COUNT=28
+EVIDENCE_FILE=workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
+RUN_ID=7e502434-a815-4663-a2fe-c5e775da3f87
+
+$ tools/causeway inspect-commits --evidence-file workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
+Enriching 6 of 28 window commits (scanCommitLimit=6)
+ENRICHED_COUNT=6
+ENRICHED_FILE=workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87_enriched.json
+SAMPLE sha=4f859fdf3b prCount=1 diffFileCount=0 isMergeCommit=true
+SAMPLE sha=3dd0ec02f2 prCount=1 diffFileCount=3 isMergeCommit=false
+SAMPLE sha=6c14048079 prCount=1 diffFileCount=0 isMergeCommit=true
+
+Enriched commits available: 6. How many genuine bug fixes would you like to find, at most? 1
 ```
 
-You accept the default. Then:
+Batch 1 (5 commits, newest first) goes to a `bug-classifier` reviewer, which returns real scores:
+
+| sha | message | diff | PR/issue | verdict | reason |
+|---|---|---|---|---|---|
+| 4f859fdf3b | 0.75 | n/a (merge) | 0.85 | not counted | Merge commit with no diff of its own, the actual fix is in the commit below |
+| 3dd0ec02f2 | 0.55 | 0.50 | 0.80 | **bug fix** | Closes a real, confirmed security vulnerability (CWE-91 XML element injection, issue #1071): JSON keys containing XML metacharacters could break out of their element and inject arbitrary XML structure. The diff narrows `XML.toString`'s validation to reject exactly those metacharacters, with new tests asserting the rejection |
+| 6c140480 | 0.05 | n/a (merge) | 0.10 | not a bug fix | Routine release-prep merge |
+| 34efda64 | 0.05 | 0.15 | 0.10 | not a bug fix | Version bump and changelog entry, not the fix itself |
+| 22ab2fb7 | 0.20 | 0.25 | 0.00 | not a bug fix | Documentation link correction, no application code change |
 
 ```
-There are 28 commits in this window. How many of these commits
-should be scanned in detail?
+Examined 5 of 6 scanned commits, stopped early after reaching your
+target of 1 genuine bug fix.
+Final file: workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87_classified.json
 ```
 
-You answer, say, `6`. Then:
+### Running stages individually
 
-```
-Repo: stleary/JSON-java
-Remote: origin (https://github.com/stleary/JSON-java)
-Branch: master @ 4f859fdf3b
-Window: past 3 months (since 2026-06-05)
-Commits in window: 28
-Scan commit limit: 6
-Evidence file: workspace/exports/run_230a05ac-5726-4bd4-be3d-9097d92fbd4e.json
+`/inspect_repo`, `/inspect_commits`, and `/classify_bugs` are the same three stages `/run_causeway` chains together, run one at a time instead, each stopping to report its own result and telling you which command to run next. Use these instead of `/run_causeway` when you want to look at a stage's output (how many commits fell in the window, what got enriched, the classification table) before deciding whether to continue.
 
-Next, run /inspect_commits, which will fetch each commit's linked
-GitHub PRs/issues and its JGit diff content.
-
-If anything above is wrong, just run /inspect_repo again to start over.
-```
-
-The evidence file's `repoSnapshot` records exactly what was chosen:
+The evidence file's `repoSnapshot` records exactly what was mined:
 
 ```json
 {
   "remoteName": "origin",
   "branch": "master",
   "remoteHeadSha": "4f859fdf3b5669894c5ed8a305ee5cd5f1fe2b7a",
-  "retrievedAt": "2026-09-11T19:53:25.388268700Z"
+  "retrievedAt": "2026-09-12T22:46:03.873518700Z"
 }
 ```
 
-One commit from inside that JSON file looks like this (trimmed):
+One commit from that same file (trimmed):
 
 ```json
 {
   "sha": "3dd0ec02f25c7c8f716fd62e1e3ffc6254004275",
   "shortMessage": "#1071: narrow tag-name check to XML metachars only",
   "fullMessage": "#1071: narrow tag-name check to XML metachars only\n\n...",
-  "author": { "name": "...", "email": "...", "date": "2026-08-24T..." },
-  "committer": { "name": "...", "email": "...", "date": "2026-08-24T..." },
-  "commitDate": "2026-08-24T17:22:44Z",
+  "commitDate": "2026-08-20T15:14:07Z",
   "parentShas": ["6b993e2e47b9a328a9d166a720b33fa7e3e58848"]
 }
 ```
 
-### 3. `/inspect_commits`
-
-What happens, step by step:
-
-It finds the JSON file from the previous step. For every commit up to the scan commit limit, it asks GitHub for linked pull requests and issues, in batches of up to 20 commits per request rather than one request each. For every non-merge commit, it computes the actual code change using JGit. It writes a new JSON file with all of this added, and shows you a few examples directly.
-
-Example output:
-
-```
-Enriched 6 of 28 window commits.
-Evidence file: workspace/exports/run_230a05ac..._enriched.json
-
-Examples:
-- 4f859fdf3b: 1 linked PR, 0 files changed (merge commit, skipped)
-- 3dd0ec02f2: 1 linked PR, 3 files changed
-- 6c140480: 1 linked PR, 0 files changed (merge commit, skipped)
-
-Next, run /classify_bugs, which will score each commit on whether
-it's a genuine bug fix.
-
-If anything above is wrong, just run /inspect_commits again to start over.
-```
-
-The same commit from before now has two new fields added, `pullRequests` and `diff` (the diff is shortened here, the real one includes the full code change):
+The same commit after `/inspect_commits`, with `pullRequests` and `diff` added (diff shortened here):
 
 ```json
 {
   "sha": "3dd0ec02f25c7c8f716fd62e1e3ffc6254004275",
   "shortMessage": "#1071: narrow tag-name check to XML metachars only",
-  "fullMessage": "#1071: narrow tag-name check to XML metachars only\n\n...",
   "pullRequests": [
     {
       "number": 1072,
       "title": "Reject invalid XML element names",
       "state": "MERGED",
       "closingIssues": [
-        { "number": 1071, "title": "XML.toString: unescaped keys allow XML element injection (CWE-91)" }
+        { "number": 1071, "title": "XML.toString: unescaped keys allow XML element injection (CWE-91) — proposal to throw per #294" }
       ],
       "commitShas": ["e2cfb5a64150455bf63ad334da9827e7671c9133", "6b993e2e47b9a328a9d166a720b33fa7e3e58848", "3dd0ec02f25c7c8f716fd62e1e3ffc6254004275"],
       "commitTotalCount": 3
@@ -283,70 +299,15 @@ The same commit from before now has two new fields added, `pullRequests` and `di
 }
 ```
 
-Alongside the commit list, the enriched file also carries a top-level `issueTimelines` array, one entry per issue discovered via `closingIssues` above, with data fetched from the issue's own side rather than through a commit or PR:
-
-```json
-{
-  "number": 1071,
-  "body": "... the issue's own description text ...",
-  "referencedCommits": [
-    { "sha": "4f859fdf3b5669894c5ed8a305ee5cd5f1fe2b7a", "isCrossRepository": false },
-    { "sha": "3dd0ec02f25c7c8f716fd62e1e3ffc6254004275", "isCrossRepository": true }
-  ],
-  "crossReferencingPRs": [
-    { "number": 1072, "title": "Reject invalid XML element names", "url": "https://github.com/stleary/JSON-java/pull/1072" }
-  ]
-}
-```
-
-### 4. `/classify_bugs`
-
-What happens, step by step:
-
-It finds the enriched JSON file and tells you how many commits are in it, then asks how many genuine bug fixes you'd like to find, at most. This is the bug target, and it's a different number from the scan commit limit you gave earlier: that one bounded how many commits get looked at, this one bounds how many accepted results you end up with.
-
-It then works through the commits in groups of 5, newest first, one group at a time. For each group, it sends the commits to their own AI reviewer, who scores every commit in the group on three separate things, each from 0.0 to 1.0 with a short explanation: how the commit message reads, what the actual code change looks like, and what any linked pull requests or issues say. Once a group's scores come back, the orchestrator (not the reviewer) reads all three scores and explanations for every commit in that group and decides, for each one, bug fix or not, with its own short reasoning.
-
-After each group, it checks its running total of genuine bug fixes found so far. If that total has reached the bug target, it stops there and does not look at any remaining groups. If not, and groups remain, it moves on to the next one. If it runs out of groups before reaching the target, it stops anyway and says plainly that the window simply didn't contain that many genuine bug fixes among the commits scanned.
-
-Because groups are processed newest first and stop as soon as the target is reached, a small bug target means only the most recent commits get examined closely, older scanned commits may never be looked at.
-
-It shows you a table of everything it actually examined, and writes one final JSON file with everything in it.
-
-Example output, if the bug target was 1 and the first group already found it:
-
-```
-Enriched commits available: 6
-How many genuine bug fixes would you like to find, at most?
-```
-
-You answer, say, `1`. Then:
-
-| sha        | message | diff | PR/issue | verdict | reason |
-|------------|---------|------|----------|---------|--------|
-| 4f859fdf3b | 0.85    | n/a  | 0.90     | not counted (merge commit) | Merge commit, no diff to examine |
-| 3dd0ec02f2 | 0.75    | 0.80 | 0.85     | bug fix | Rewrites the tag name check to close a real XML injection issue (CWE-91), confirmed by the linked issue and PR |
-
-```
-Examined 2 of 6 scanned commits, stopped early after reaching your
-target of 1 genuine bug fix.
-Final file: workspace/exports/run_230a05ac..._classified.json
-
-This is as far as Causeway Mini currently goes, there's no next
-command yet.
-
-If anything above is wrong, just run /classify_bugs again to start over.
-```
-
 ## The SQLite catalog
 
-Every command above, after writing its own JSON file, also stores that file's contents into `workspace/causeway.db`. This happens automatically, there's nothing extra to type. It's additive: the JSON files are still what each command actually reads from the step before it, the database exists so the data can also be queried directly, across every run that's ever been done, rather than only ever being read one JSON file at a time.
+Every command above, after writing its own JSON file, also stores that file's contents into `workspace/causeway.db`. This happens automatically. The database is queryable directly, across every run ever done, rather than only ever being read one JSON file at a time.
 
-Repeating a step (say, re-running `/inspect_repo` for the same repo and window) updates the existing rows rather than creating duplicates. Mining the same repo again with a *different* window creates a second, separate run, but both runs still share the one row for the repository itself, and a commit rediscovered by both runs is still just one row in `commits`, linked to both runs.
+Repeating a step (say, re-running `/inspect_repo` for the same repo and window) updates the existing rows rather than creating duplicates. Mining the same repo again with a different window creates a second, separate run; both still share the one row for the repository itself, and a commit rediscovered by both runs is still just one row in `commits`, linked to both.
 
 ### How a commit connects to a PR or an issue
 
-A commit belonging to a PR, a PR closing an issue, and a commit's own message merely mentioning an issue number are three different claims with three different strengths of evidence, and that's only the start of the list, so they're kept as distinctly-typed rows in one `relations` table (a `relation_type` column says which kind each row is, and `evidence` records the source text or GitHub field that established it), rather than collapsed into one generic "this commit relates to this issue" fact. That collapsing used to be a real bug here: attributing a PR's closing issue to every commit inside that PR overstated the connection for every commit in the PR except whichever one actually did the closing, since closing an issue is a fact about the PR as a whole, not about any one commit in it. Querying across relation types is just a `WHERE relation_type = '...'`, or no filter at all for "every relation touching this commit."
+A commit belonging to a PR, a PR closing an issue, and a commit's own message merely mentioning an issue number are three different claims with three different strengths of evidence, kept as distinctly-typed rows in one `relations` table (a `relation_type` column says which kind each row is, `evidence` records the source text or GitHub field that established it). Querying across relation types is a `WHERE relation_type = '...'`, or no filter at all for "every relation touching this commit."
 
 All seven relation types currently populated:
 
@@ -360,9 +321,9 @@ All seven relation types currently populated:
 | `issue_mentions_commit` | commit, issue | a commit-SHA-shaped token found in the issue's own body text | the matched token |
 | `commit_message_references_issue` | commit, issue | a raw `#123`-shaped match in the commit's own message | the matched `#N` |
 
-`commit_associated_pr` and `pr_contains_commit` look at first glance like the same fact from two directions, they aren't: they come from two separately-queried GitHub facts that can disagree. A merge commit is a common real example, GitHub resolves it as "associated" with the PR it merged, but a PR's own commit list usually doesn't include the merge commit itself, only the commits that were merged in, so a merge commit typically gets a `commit_associated_pr` row with no matching `pr_contains_commit` row. `pr_mentions_issue` and `pr_closes_issue` can likewise both exist for the same PR/issue pair (a PR can reference an issue without its reference being the thing that closes it), or just one.
+`commit_associated_pr` and `pr_contains_commit` can disagree: a merge commit typically gets a `commit_associated_pr` row (GitHub resolves it as associated with the PR it merged) with no matching `pr_contains_commit` row (that PR's own commit list usually doesn't include the merge commit itself). `pr_mentions_issue` and `pr_closes_issue` can likewise both exist for the same PR/issue pair, or just one.
 
-For example, after running the full pipeline once, this finds every genuine bug fix found so far, across every classification run, joining through whichever PR actually closed the linked issue (not just any PR the commit happened to be associated with):
+This finds every genuine bug fix found so far, across every classification run, joining through whichever PR actually closed the linked issue:
 
 ```sql
 SELECT c.sha, c.short_message, i.title AS issue_title, bc.verdict_rationale
@@ -374,17 +335,33 @@ LEFT JOIN issues i ON i.id = closes.issue_id
 WHERE bc.verdict = 1;
 ```
 
+Real output, including the JSON-java commit classified above:
+
+```
+3dd0ec02f2 | #1071: narrow tag-name check to XML metachars only | XML.toString: unescaped keys allow XML element injection (CWE-91) — proposal to throw per #294 | Closes a real, confirmed security vulnerability (CWE-91 XML...
+```
+
 ### Discovered repositories
 
-`/discover_repos` writes to the catalog directly, there's no JSON file and no separate `store` step for it. `search_repos_runs` holds the exact specification of each search (language, minimum stars, activity window, size bounds, fork/archived status, topics, license, and the requested result cap); `search_run_repositories` links that search to every repository it found, each with a snapshot of that repository's stars/language/last-pushed-date/etc. *at the moment that search found it*, since those change over time and a repository can legitimately be rediscovered by a later, differently-specified search. For example, this finds every repository any search has ever surfaced with at least 10,000 stars, and which searches found each one:
+`/discover_repos` writes to the catalog directly, there's no JSON file for it. `search_repos_runs` holds the exact specification of each search (language, star bounds, activity window, size bounds, fork-count bounds, repo-age bounds, fork/archived status, `topic_filter`, license, the requested result cap); `search_repos_run_repositories` links that search to every repository it found, each with a snapshot of that repository's stars/language/last-pushed-date/etc. at the moment that search found it. This finds every repository any search has ever surfaced with at least 10,000 stars, and which search found each one:
 
 ```sql
 SELECT r.owner, r.repo, srr.stars, sr.language, sr.min_stars, sr.created_at
-FROM search_run_repositories srr
+FROM search_repos_run_repositories srr
 JOIN repositories r ON r.id = srr.repository_id
 JOIN search_repos_runs sr ON sr.id = srr.search_repos_run_id
 WHERE srr.stars >= 10000
 ORDER BY srr.stars DESC;
+```
+
+Real output (top 5):
+
+```
+chinabugotech      | hutool             | 30273 | Java | 1000 | 2026-09-12 22:44:05
+opendataloader-project | opendataloader-pdf | 29103 | Java | 1000 | 2026-09-12 22:44:05
+alibaba             | fastjson           | 25594 | Java | 1000 | 2026-09-12 22:44:05
+redisson            | redisson           | 24392 | Java | 1000 | 2026-09-12 22:44:05
+apple               | pkl                | 11518 | Java | 1000 | 2026-09-12 22:44:05
 ```
 
 ## How it all fits together
@@ -403,16 +380,13 @@ flowchart TD
     REPODISC -- "search results" --> QUALIFY
     QUALIFY -- "metadata + tree, no cloning" --> GH0{{GitHub}}
     QUALIFY -. "store qualification" .-> DB
-    QUALIFY -- "pick a qualifying one" --> RC
+    QUALIFY -- "pick a qualifying one" --> IR0
 
-    RC["/run_causeway<br/>ask for repo URL + time window"]
-    GH1{{GitHub}}
-    RC -- "repo URL" --> GH1
-    GH1 -- "not found, up to 3 tries" --> RC
-    GH1 -- "found it" --> IR
+    LISTQ["/list_qualifying_repos (optional)<br/>list-qualifying-repos: pure DB read, every past search"]
+    DB -. "every qualifying repo ever found" .-> LISTQ
+    LISTQ -- "pick one" --> IR0
 
-    IR0["/inspect_repo<br/>download or open the repo,<br/>list its remotes, ask which to use"]
-    RC -- "repo + time window" --> IR0
+    IR0["/inspect_repo<br/>ask repo URL + window,<br/>clone/open it, list its remotes, ask which to use"]
     IR1["fetch from chosen remote,<br/>list its branches via GitHub,<br/>ask which branch to mine"]
     IR0 --> IR1
     IR["list commits in the window<br/>from the chosen branch,<br/>ask for a scan commit limit"]
@@ -420,7 +394,6 @@ flowchart TD
 
     EV[["evidence file (JSON)<br/>commit list, plus remote/branch/SHA chosen,<br/>plus scan commit limit"]]
     IR --> EV
-    DB[(workspace/causeway.db)]
     EV -. "store" .-> DB
 
     IC["/inspect_commits<br/>fetch PR/issue context, compute code diffs"]
@@ -448,19 +421,17 @@ flowchart TD
 
     RESULT[["final file + table for you:<br/>every commit examined, its scores, its verdict"]]
     RESULT -. "store" .-> DB
-```
 
-Reading it top to bottom: `/discover_repos`, if you use it, describes what you're looking for in plain language, the `repo-discovery` agent translates that into structured search flags and runs the search, and every result is stored right away, not just whichever one you go on to pick. Those same results then go through `qualify-repos`, a fixed check invoked directly rather than through an agent (there's no translation judgment to make), which asks GitHub cheap questions about each one, no cloning involved, before you're shown anything. `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL (if you picked a repo from `/discover_repos`, its URL is already known here). `/inspect_repo` downloads or opens the repo, shows you its actual remotes and lets you pick one, then shows you that remote's actual branches (via GitHub) and lets you pick one, then lists the commits in your time window from that exact choice and asks for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file. Each of the three JSON files (dashed arrows above) also gets stored into the SQLite catalog as it's produced, so the data ends up queryable directly, not just readable one file at a time.
+    RC{{"/run_causeway runs IR0 through RESULT<br/>in one command, same questions, no stopping"}}
+    RC -. "one command, whole chain" .-> IR0
+```
 
 ## Running the whole workflow
 
 1. Make sure `.env` exists at the project root with a valid `GITHUB_TOKEN` in it.
 2. Open this project in Claude Code.
-2a. Don't already have a specific repo in mind? Type `/discover_repos` first, describe what you're looking for, and pick one of the results. Skip this if you already know the repo.
-3. Type `/run_causeway` and answer its two questions: the repo URL and the time window.
-4. Type `/inspect_repo`. Confirm or choose the remote if there's more than one, confirm or choose the branch to mine, then answer its question about the scan commit limit once it shows you the commit count.
-5. Type `/inspect_commits` and let it run. No questions this time, it reuses everything from before.
-6. Type `/classify_bugs`. Answer its question about the bug target once it shows you how many commits were scanned, then let it run. This is the step that takes the longest, since it works through commits in groups until it finds enough.
-7. Read the table it prints, and open the final JSON file it mentions if you want the full detail behind every score.
-8. If any step's result looks wrong, just run that same command again to redo it.
-9. Everything that was written to a JSON file along the way is also sitting in `workspace/causeway.db`, queryable directly with any SQLite client, if you'd rather look at the data that way than open the JSON files one at a time.
+3. Don't already have a specific repo in mind? Type `/discover_repos` first, describe what you're looking for, and pick one of the results. Already ran `/discover_repos` before and want to revisit an older result? Type `/list_qualifying_repos` instead. Skip either if you already know the repo.
+4. Type `/run_causeway` to run the whole pipeline in one go, answering its questions (repo URL, window, remote/branch if there's a choice, scan commit limit, bug target) as they come up. Or, for more control between stages, type `/inspect_repo`, then `/inspect_commits`, then `/classify_bugs` instead, one at a time.
+5. Read the table `/classify_bugs` (or `/run_causeway`) prints, and open the final JSON file it mentions for the full detail behind every score.
+6. If any step's result looks wrong, run that same command again to redo it.
+7. Everything written to a JSON file along the way is also sitting in `workspace/causeway.db`, queryable directly with any SQLite client.

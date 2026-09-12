@@ -9,7 +9,7 @@ Run the Causeway Mini commit-enrichment flow. This adds, to each commit already 
 
 If this conversation already knows the evidence file path from a `/inspect_repo` run earlier in this session, use it directly.
 
-Otherwise, ask the user for the path to the evidence file `/inspect_repo` produced (or list `workspace/exports/*.json` — excluding any `*_enriched.json` files — and ask them to confirm which run to enrich if more than one exists).
+Otherwise, list `workspace/exports/*.json` (excluding any `*_enriched.json` files). If there's more than one, use the AskUserQuestion tool, header `"Evidence file"`, one option per file (up to 4, most recent first if there are more, the tool's custom-answer option still lets the person name an older one directly) to ask which run to enrich. If there's exactly one, just use it.
 
 ## 2. Run the enrichment tool
 
@@ -40,7 +40,7 @@ If the command fails, or doesn't print an `ENRICHED_FILE` line, report the failu
 tools/causeway store --file <enriched-file>
 ```
 
-This upserts this run, plus every enriched commit's PRs, issues, and issue-commit links, into `workspace/causeway.db`, linked back to the `/inspect_repo` run that discovered these commits via the shared `runId`. It won't overwrite the author/committer data already stored for these commits (the enriched file doesn't carry that data itself).
+This upserts this run, plus every enriched commit's PRs, issues, and issue-commit links, into `workspace/causeway.db`, linked back to the `/inspect_repo` run that discovered these commits via the shared `runId`.
 
 If this fails, report it plainly but don't treat it as blocking, the enriched file itself is still valid and `/classify_bugs` only reads that.
 

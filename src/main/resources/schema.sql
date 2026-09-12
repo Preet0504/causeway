@@ -13,11 +13,69 @@
 -- both carry forward the run_id their upstream stage used, rather than
 -- minting a new one), it just lives in a different table per stage.
 
+-- Qualification columns (has_issues through checked_at) live directly on
+-- this table, as nullable columns, rather than a separate
+-- repository_qualifications table: qualifying a repository is a strict
+-- one-to-one fact about it (repository_id would be that table's own
+-- primary key), not a one-to-many relationship, so a separate table would
+-- only add a join every place qualification data is read, for no
+-- normalization benefit. They stay NULL until `qualify-repos` actually
+-- checks a repository; re-checking overwrites them in place, there is no
+-- history of past checks, only the latest one, since nothing depends on
+-- reproducing a stale qualification the way reproducing a past search's
+-- exact result set matters (see search_repos_run_repositories below, which
+-- does keep history, for that contrast). has_issues is a repo setting that
+-- can't be derived from a count (a repo can have issues enabled with zero
+-- ever filed, a different fact than disabled); has_issues = false, or
+-- having no closed issue and no merged PR at all (no possible source of
+-- bug-fix evidence), are the two hard disqualifiers. There is no separate
+-- `qualifies` boolean column: it would always be exactly
+-- `rejection_reason IS NULL`, a persisted column that could never actually
+-- disagree with `rejection_reason`'s own nullability is pure redundancy,
+-- so "qualifies" is a query condition (`rejection_reason IS NULL`), not a
+-- stored fact. test_file_count is a soft, pattern-matched heuristic (real
+-- tests can live somewhere this doesn't recognize) and never by itself
+-- produces a rejection reason.
+-- description/repo_created_at/forks_count/topics/default_branch are stable
+-- identity-ish facts (GitHub's repo metadata, not a point-in-time
+-- snapshot), populated by whichever tool (search-repos or qualify-repos)
+-- sees this repository first, COALESCE-preserved so neither overwrites the
+-- other with null. current_stars through current_license, by contrast, are
+-- the single "what does this repository currently look like" snapshot,
+-- written by both search-repos and qualify-repos every time either one
+-- sees a repository (same COALESCE-preserving upsert as the identity
+-- fields above, so whichever ran more recently simply wins), deliberately
+-- distinct from search_repos_run_repositories' per-search historical
+-- snapshot below (that one keeps every search's own point-in-time
+-- snapshot, this one keeps only the latest known state). A repository
+-- qualified directly (--owner/--repo, never discovered via search) still
+-- gets this data recorded, via the same shared upsert path.
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   owner TEXT NOT NULL,
   repo TEXT NOT NULL,
   url TEXT NOT NULL,
+  description TEXT,
+  repo_created_at TEXT,
+  forks_count INTEGER,
+  topics TEXT,
+  default_branch TEXT,
+  has_issues INTEGER,
+  closed_issue_count INTEGER,
+  open_issue_count INTEGER,
+  merged_pr_count INTEGER,
+  open_pr_count INTEGER,
+  test_file_count INTEGER,
+  test_evidence_paths TEXT,
+  tree_truncated INTEGER,
+  current_stars INTEGER,
+  current_language TEXT,
+  current_size_kb INTEGER,
+  current_archived INTEGER,
+  current_fork INTEGER,
+  current_license TEXT,
+  rejection_reason TEXT,
+  checked_at TEXT,
   UNIQUE (owner, repo)
 );
 
@@ -59,7 +117,6 @@ CREATE TABLE IF NOT EXISTS classify_bugs_runs (
   inspect_commits_run_id INTEGER REFERENCES inspect_commits_runs(id),
   bug_target INTEGER NOT NULL,
   examined_commit_count INTEGER NOT NULL,
-  scanned_commit_count INTEGER NOT NULL,
   stopped_early INTEGER NOT NULL,
   source_file TEXT NOT NULL,
   created_at TEXT NOT NULL
@@ -67,27 +124,50 @@ CREATE TABLE IF NOT EXISTS classify_bugs_runs (
 
 -- One row per `search-repos` invocation, capturing the exact structured
 -- search specification that produced its results (language, minimum
--- stars, activity window, size bounds, fork/archived status, topics,
--- license, and the requested result cap), so a discovered repository can
--- always be traced back to exactly what was asked for. `topics` is stored
--- as a single comma-joined column rather than a separate join table: it's
--- part of one search's own specification, not a reusable dimension shared
--- across searches, so normalizing it further would add a table without
--- adding any real query power. Unlike the other three run tables, there is
--- no `source_file`: search-repos has no JSON output, its results are
--- inserted into the database directly as they're paginated.
+-- stars, activity window, size bounds, fork count bounds, repo age
+-- bounds, fork/archived status, topic filter, license, and the requested
+-- result cap), so a discovered repository can always be traced back to
+-- exactly what was asked for. `topic_filter` is stored as a single
+-- comma-joined column rather than a separate join table: it's part of one
+-- search's own specification, not a reusable dimension shared across
+-- searches, so normalizing it further would add a table without adding
+-- any real query power. It's named `topic_filter`, not `topics`, to
+-- distinguish it from `repositories.topics` (a repository's own actual
+-- topics, a completely different fact from what topic a search filtered
+-- on). Unlike the other three run tables, there is no `source_file`:
+-- search-repos has no JSON output, its results are inserted into the
+-- database directly as they're paginated.
+--
+-- min/max_repo_age_years are the requested durations (mirroring
+-- pushed_within_months); created_after_date/created_before_date are
+-- those durations resolved to absolute dates at the time of the search
+-- (mirroring pushed_since_date), stored alongside the requested duration
+-- for the same provenance reason. Age and creation date point in opposite
+-- directions: an *older* repository (a larger min-age) has a *smaller*
+-- (earlier) creation date, so min_repo_age_years resolves to
+-- created_before_date (must have been created on or before that date to
+-- be at least that old) and max_repo_age_years resolves to
+-- created_after_date (must have been created on or after that date to be
+-- at most that old), not the other way around.
 CREATE TABLE IF NOT EXISTS search_repos_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT NOT NULL UNIQUE,
   language TEXT,
   min_stars INTEGER,
+  max_stars INTEGER,
   pushed_within_months INTEGER,
   pushed_since_date TEXT,
   min_size_kb INTEGER,
   max_size_kb INTEGER,
+  min_forks INTEGER,
+  max_forks INTEGER,
+  min_repo_age_years INTEGER,
+  max_repo_age_years INTEGER,
+  created_before_date TEXT,
+  created_after_date TEXT,
   fork_status TEXT,
   archived_status TEXT,
-  topics TEXT,
+  topic_filter TEXT,
   license TEXT,
   max_results INTEGER NOT NULL,
   result_count INTEGER NOT NULL,
@@ -95,12 +175,12 @@ CREATE TABLE IF NOT EXISTS search_repos_runs (
 );
 
 -- Many-to-many between a search run and the repositories it found, mirrors
--- `run_commits`: the same repository can legitimately be rediscovered by a
--- later, differently-specified search, and each discovery should keep its
--- own point-in-time snapshot (a repo's star count, last-pushed date, and
--- so on all change over time), rather than one search's write silently
--- overwriting another's.
-CREATE TABLE IF NOT EXISTS search_run_repositories (
+-- `inspect_repo_run_commits`: the same repository can legitimately be
+-- rediscovered by a later, differently-specified search, and each
+-- discovery should keep its own point-in-time snapshot (a repo's star
+-- count, last-pushed date, and so on all change over time), rather than
+-- one search's write silently overwriting another's.
+CREATE TABLE IF NOT EXISTS search_repos_run_repositories (
   search_repos_run_id INTEGER NOT NULL REFERENCES search_repos_runs(id),
   repository_id INTEGER NOT NULL REFERENCES repositories(id),
   stars INTEGER,
@@ -113,54 +193,15 @@ CREATE TABLE IF NOT EXISTS search_run_repositories (
   PRIMARY KEY (search_repos_run_id, repository_id)
 );
 
--- One row per repository, the CURRENT answer to "is this worth cloning",
--- re-checking replaces the row rather than layering a historical record
--- the way search_run_repositories does: nothing depends on reproducing a
--- stale qualification check, only on the latest one. Cheap, pre-clone
--- signals only, no cloning involved: has_issues and the closed-issue/
--- merged-PR counts come from repo metadata and the search API,
--- appears_to_have_tests comes from pattern-matching file paths in the
--- default branch's tree (fetched in one request, no file content, no
--- clone). appears_to_have_tests is a soft, heuristic signal (a repo could
--- easily have tests in an unconventional location this doesn't recognize)
--- so it is recorded but does not by itself fail `qualifies`; has_issues
--- being false, or having no closed issues and no merged PRs at all (no
--- possible source of bug-fix evidence), are the two hard disqualifiers.
-CREATE TABLE IF NOT EXISTS repository_qualifications (
-  repository_id INTEGER PRIMARY KEY REFERENCES repositories(id),
-  has_issues INTEGER NOT NULL,
-  closed_issue_count INTEGER NOT NULL,
-  merged_pr_count INTEGER NOT NULL,
-  appears_to_have_tests INTEGER NOT NULL,
-  test_evidence_paths TEXT,
-  tree_truncated INTEGER NOT NULL,
-  qualifies INTEGER NOT NULL,
-  rejection_reason TEXT,
-  checked_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS commits (
   sha TEXT PRIMARY KEY,
   repository_id INTEGER NOT NULL REFERENCES repositories(id),
   short_message TEXT NOT NULL,
   full_message TEXT NOT NULL,
-  author_name TEXT,
-  author_email TEXT,
-  author_date TEXT,
-  committer_name TEXT,
-  committer_email TEXT,
-  committer_date TEXT,
   first_seen_inspect_repo_run_id INTEGER REFERENCES inspect_repo_runs(id)
 );
 
-CREATE TABLE IF NOT EXISTS commit_parents (
-  commit_sha TEXT NOT NULL REFERENCES commits(sha),
-  parent_sha TEXT NOT NULL,
-  parent_order INTEGER NOT NULL,
-  PRIMARY KEY (commit_sha, parent_order)
-);
-
-CREATE TABLE IF NOT EXISTS run_commits (
+CREATE TABLE IF NOT EXISTS inspect_repo_run_commits (
   inspect_repo_run_id INTEGER NOT NULL REFERENCES inspect_repo_runs(id),
   commit_sha TEXT NOT NULL REFERENCES commits(sha),
   PRIMARY KEY (inspect_repo_run_id, commit_sha)
@@ -258,6 +299,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS relations_natural_key ON relations (
   COALESCE(issue_id, -1)
 );
 
+-- relations_natural_key is an expression index (COALESCE-wrapped columns),
+-- so it doesn't serve a plain `WHERE commit_sha = ?` (or pull_request_id/
+-- issue_id) lookup, which is exactly how relations get looked up when
+-- walking from a commit/PR/issue to what it's connected to. Plain indexes
+-- on each endpoint make those lookups use an index instead of a full scan.
+CREATE INDEX IF NOT EXISTS relations_commit_sha ON relations (commit_sha);
+CREATE INDEX IF NOT EXISTS relations_pull_request_id ON relations (pull_request_id);
+CREATE INDEX IF NOT EXISTS relations_issue_id ON relations (issue_id);
+
 CREATE TABLE IF NOT EXISTS bug_classifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   commit_sha TEXT NOT NULL REFERENCES commits(sha),
@@ -274,33 +324,10 @@ CREATE TABLE IF NOT EXISTS bug_classifications (
   UNIQUE (commit_sha, classify_bugs_run_id)
 );
 
--- Stub for a future detect-tests capability: whether a commit shipped its
--- own regression test. Not populated by anything yet.
-CREATE TABLE IF NOT EXISTS test_observations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  commit_sha TEXT NOT NULL REFERENCES commits(sha),
-  has_regression_test INTEGER,
-  test_file_path TEXT,
-  detection_method TEXT,
-  observed_at TEXT
-);
-
--- Stub for a future materialize-commit capability: a commit's source tree
--- checked out to disk for building/testing. Not populated by anything yet.
-CREATE TABLE IF NOT EXISTS materialized_revisions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  commit_sha TEXT NOT NULL REFERENCES commits(sha),
-  checkout_path TEXT,
-  materialized_at TEXT
-);
-
--- Stub for a future build capability: whether a materialized revision
--- actually compiles. Not populated by anything yet.
-CREATE TABLE IF NOT EXISTS build_runs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  materialized_revision_id INTEGER REFERENCES materialized_revisions(id),
-  status TEXT,
-  log_path TEXT,
-  started_at TEXT,
-  finished_at TEXT
-);
+-- No stub tables for not-yet-built capabilities (detect-tests,
+-- materialize-commit, build): none of them are populated by anything yet,
+-- and an empty, unused table is speculative schema for a capability that
+-- doesn't exist. Add test_observations / materialized_revisions /
+-- build_runs back (they were sketched out once, see DECISIONS.md) when the
+-- corresponding capability actually gets built and needs somewhere to
+-- write.

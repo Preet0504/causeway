@@ -9,8 +9,9 @@ import java.time.{Duration as JDuration, LocalDate}
 import java.util.UUID
 
 /** Discovers candidate repositories via GitHub's repository search API from
-  * a structured specification (language, minimum stars, recent activity,
-  * size, fork/archived status, topics, license, and a result cap), rather
+  * a structured specification (language, a star range, recent activity,
+  * a size range, a fork-count range, a repo-age range, fork/archived
+  * status, topics, license, and a result cap), rather
   * than requiring a person to already know an exact repo URL the way
   * `/inspect_repo` does. Unlike `InspectRepo`/`EnrichCommits`, this writes
   * no JSON file: results are paginated and inserted into the SQLite
@@ -41,9 +42,14 @@ object SearchRepos:
 
     val language = opts.get("language")
     val minStars = opts.get("min-stars").map(_.toInt)
+    val maxStars = opts.get("max-stars").map(_.toInt)
     val pushedWithinMonths = opts.get("pushed-within-months").map(_.toInt)
     val minSizeKb = opts.get("min-size-kb").map(_.toInt)
     val maxSizeKb = opts.get("max-size-kb").map(_.toInt)
+    val minForks = opts.get("min-forks").map(_.toInt)
+    val maxForks = opts.get("max-forks").map(_.toInt)
+    val minRepoAgeYears = opts.get("min-repo-age-years").map(_.toInt)
+    val maxRepoAgeYears = opts.get("max-repo-age-years").map(_.toInt)
     val forkStatus = opts.get("fork").map(validateFork)
     val archivedStatus = opts.get("archived").map(validateBoolFlag("--archived"))
     val topics = opts.get("topics").toList.flatMap(_.split(",").map(_.trim).filter(_.nonEmpty))
@@ -59,10 +65,31 @@ object SearchRepos:
       else requestedMaxResults
 
     val pushedSinceDate = pushedWithinMonths.map(months => LocalDate.now().minusMonths(months.toLong).toString)
+    // An older repository (a larger min-age) has a smaller (earlier)
+    // creation date, so min age resolves to an upper bound on the
+    // creation date, and max age resolves to a lower bound, not the
+    // other way around.
+    val createdBeforeDate = minRepoAgeYears.map(years => LocalDate.now().minusYears(years.toLong).toString)
+    val createdAfterDate = maxRepoAgeYears.map(years => LocalDate.now().minusYears(years.toLong).toString)
 
-    val qualifiers = buildQualifiers(language, minStars, pushedSinceDate, minSizeKb, maxSizeKb, forkStatus, archivedStatus, topics, license)
+    val qualifiers = buildQualifiers(
+      language,
+      minStars,
+      maxStars,
+      pushedSinceDate,
+      minSizeKb,
+      maxSizeKb,
+      minForks,
+      maxForks,
+      createdAfterDate,
+      createdBeforeDate,
+      forkStatus,
+      archivedStatus,
+      topics,
+      license
+    )
     if qualifiers.isEmpty then
-      fail("At least one search discriminator is required (language, min-stars, pushed-within-months, size, fork, archived, topics, or license)")
+      fail("At least one search discriminator is required (language, min-stars, pushed-within-months, size, forks, repo-age, fork, archived, topics, or license)")
 
     val runId = UUID.randomUUID().toString
 
@@ -78,10 +105,17 @@ object SearchRepos:
         runId,
         language,
         minStars,
+        maxStars,
         pushedWithinMonths,
         pushedSinceDate,
         minSizeKb,
         maxSizeKb,
+        minForks,
+        maxForks,
+        minRepoAgeYears,
+        maxRepoAgeYears,
+        createdBeforeDate,
+        createdAfterDate,
         forkStatus,
         archivedStatus,
         topics,
@@ -138,9 +172,14 @@ object SearchRepos:
   private[mini] def buildQualifiers(
       language: Option[String],
       minStars: Option[Int],
+      maxStars: Option[Int],
       pushedSinceDate: Option[String],
       minSizeKb: Option[Int],
       maxSizeKb: Option[Int],
+      minForks: Option[Int] = None,
+      maxForks: Option[Int] = None,
+      createdAfterDate: Option[String] = None,
+      createdBeforeDate: Option[String] = None,
       forkStatus: Option[String],
       archivedStatus: Option[String],
       topics: List[String],
@@ -148,13 +187,31 @@ object SearchRepos:
   ): String =
     val parts = scala.collection.mutable.ListBuffer[String]()
     language.foreach(l => parts += s"language:$l")
-    minStars.foreach(n => parts += s"stars:>=$n")
+    (minStars, maxStars) match
+      case (Some(min), Some(max)) => parts += s"stars:$min..$max"
+      case (Some(min), None)      => parts += s"stars:>=$min"
+      case (None, Some(max))      => parts += s"stars:<=$max"
+      case (None, None)           => ()
     pushedSinceDate.foreach(d => parts += s"pushed:>=$d")
     (minSizeKb, maxSizeKb) match
       case (Some(min), Some(max)) => parts += s"size:$min..$max"
       case (Some(min), None)      => parts += s"size:>=$min"
       case (None, Some(max))      => parts += s"size:<=$max"
       case (None, None)           => ()
+    (minForks, maxForks) match
+      case (Some(min), Some(max)) => parts += s"forks:$min..$max"
+      case (Some(min), None)      => parts += s"forks:>=$min"
+      case (None, Some(max))      => parts += s"forks:<=$max"
+      case (None, None)           => ()
+    // createdAfterDate/createdBeforeDate are already resolved dates (see
+    // run()'s min/max-repo-age-years -> date conversion), a min-age lower
+    // bound on how far back the repo must go becomes an upper bound on its
+    // creation date, and vice versa.
+    (createdAfterDate, createdBeforeDate) match
+      case (Some(after), Some(before)) => parts += s"created:$after..$before"
+      case (Some(after), None)         => parts += s"created:>=$after"
+      case (None, Some(before))        => parts += s"created:<=$before"
+      case (None, None)                => ()
     forkStatus.foreach(f => parts += s"fork:$f")
     archivedStatus.foreach(a => parts += s"archived:$a")
     topics.foreach(t => parts += s"topic:$t")
@@ -187,13 +244,20 @@ object SearchRepos:
       runId: String,
       language: Option[String],
       minStars: Option[Int],
+      maxStars: Option[Int],
       pushedWithinMonths: Option[Int],
       pushedSinceDate: Option[String],
       minSizeKb: Option[Int],
       maxSizeKb: Option[Int],
+      minForks: Option[Int] = None,
+      maxForks: Option[Int] = None,
+      minRepoAgeYears: Option[Int] = None,
+      maxRepoAgeYears: Option[Int] = None,
+      createdBeforeDate: Option[String] = None,
+      createdAfterDate: Option[String] = None,
       forkStatus: Option[String],
       archivedStatus: Option[String],
-      topics: List[String],
+      topicFilter: List[String],
       license: Option[String],
       maxResults: Int,
       resultCount: Int
@@ -201,20 +265,29 @@ object SearchRepos:
     Store.exec(
       conn,
       "INSERT INTO search_repos_runs " +
-        "(run_id, language, min_stars, pushed_within_months, pushed_since_date, min_size_kb, max_size_kb, fork_status, archived_status, topics, license, max_results, result_count, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
+        "(run_id, language, min_stars, max_stars, pushed_within_months, pushed_since_date, min_size_kb, max_size_kb, " +
+        "min_forks, max_forks, min_repo_age_years, max_repo_age_years, created_before_date, created_after_date, " +
+        "fork_status, archived_status, topic_filter, license, max_results, result_count, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
         "ON CONFLICT(run_id) DO UPDATE SET result_count = excluded.result_count",
       Seq(
         runId,
         language.orNull,
         minStars.map(_.asInstanceOf[Any]).orNull,
+        maxStars.map(_.asInstanceOf[Any]).orNull,
         pushedWithinMonths.map(_.asInstanceOf[Any]).orNull,
         pushedSinceDate.orNull,
         minSizeKb.map(_.asInstanceOf[Any]).orNull,
         maxSizeKb.map(_.asInstanceOf[Any]).orNull,
+        minForks.map(_.asInstanceOf[Any]).orNull,
+        maxForks.map(_.asInstanceOf[Any]).orNull,
+        minRepoAgeYears.map(_.asInstanceOf[Any]).orNull,
+        maxRepoAgeYears.map(_.asInstanceOf[Any]).orNull,
+        createdBeforeDate.orNull,
+        createdAfterDate.orNull,
         forkStatus.orNull,
         archivedStatus.orNull,
-        if topics.isEmpty then null else topics.mkString(","),
+        if topicFilter.isEmpty then null else topicFilter.mkString(","),
         license.orNull,
         maxResults,
         resultCount
@@ -229,8 +302,11 @@ object SearchRepos:
     val fullName = item("full_name").str
     val parts = fullName.split("/", 2)
     val (owner, repo) = (parts(0), parts(1))
-    val repositoryId = Store.upsertRepository(conn, owner, repo, item("html_url").str)
-
+    val description = item.obj.get("description").filterNot(_ == ujson.Null).map(_.str)
+    val repoCreatedAt = item.obj.get("created_at").filterNot(_ == ujson.Null).map(_.str)
+    val forksCount = item.obj.get("forks_count").map(_.num.toInt)
+    val topics = item.obj.get("topics").map(_.arr.toList.map(_.str)).getOrElse(Nil)
+    val defaultBranch = item.obj.get("default_branch").filterNot(_ == ujson.Null).map(_.str)
     val stars = item.obj.get("stargazers_count").map(_.num.toInt)
     val language = item.obj.get("language").filterNot(_ == ujson.Null).map(_.str)
     val pushedAt = item.obj.get("pushed_at").filterNot(_ == ujson.Null).map(_.str)
@@ -239,9 +315,27 @@ object SearchRepos:
     val isArchived = item.obj.get("archived").map(_.bool)
     val license = item.obj.get("license").filterNot(_ == ujson.Null).flatMap(_.obj.get("spdx_id")).filterNot(_ == ujson.Null).map(_.str)
 
+    val repositoryId = Store.upsertRepository(
+      conn,
+      owner,
+      repo,
+      item("html_url").str,
+      description = description,
+      repoCreatedAt = repoCreatedAt,
+      forksCount = forksCount,
+      topics = topics,
+      defaultBranch = defaultBranch,
+      currentStars = stars,
+      currentLanguage = language,
+      currentSizeKb = sizeKb,
+      currentArchived = isArchived,
+      currentFork = isFork,
+      currentLicense = license
+    )
+
     Store.exec(
       conn,
-      "INSERT INTO search_run_repositories " +
+      "INSERT INTO search_repos_run_repositories " +
         "(search_repos_run_id, repository_id, stars, language, pushed_at, size_kb, is_fork, is_archived, license) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT(search_repos_run_id, repository_id) DO UPDATE SET " +
@@ -261,7 +355,8 @@ object SearchRepos:
     )
 
     println(
-      s"REPO owner=$owner repo=$repo stars=${stars.getOrElse("?")} language=${language.getOrElse("?")} url=${item("html_url").str}"
+      s"REPO owner=$owner repo=$repo stars=${stars.getOrElse("?")} language=${language.getOrElse("?")} " +
+        s"sizeKb=${sizeKb.getOrElse("?")} url=${item("html_url").str}"
     )
 
   // ---------------------------------------------------------------------

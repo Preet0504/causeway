@@ -16,9 +16,9 @@ import scala.jdk.CollectionConverters.*
   * (`INSERT ... ON CONFLICT ... DO UPDATE`), so storing the same file
   * twice, or storing two different runs against the same repository,
   * updates or reuses existing rows rather than creating duplicates.
-  * Fields a later stage doesn't have (an enriched file has no author or
-  * committer data, that was stripped by `EnrichCommits`) are preserved via
-  * `COALESCE` rather than overwritten with null on conflict.
+  * Fields a later stage doesn't have (a PR discovered via an issue's own
+  * timeline, for instance, has no `state`) are preserved via `COALESCE`
+  * rather than overwritten with null on conflict.
   */
 object Store:
 
@@ -125,25 +125,14 @@ object Store:
 
     json("commits").arr.foreach { c =>
       val sha = c("sha").str
-      val author = c("author")
-      val committer = c("committer")
       upsertCommit(
         conn,
         sha,
         repoId,
         c("shortMessage").str,
         c("fullMessage").str,
-        authorName = Some(author("name").str),
-        authorEmail = Some(author("email").str),
-        authorDate = Some(author("date").str),
-        committerName = Some(committer("name").str),
-        committerEmail = Some(committer("email").str),
-        committerDate = Some(committer("date").str),
         firstSeenInspectRepoRunId = Some(inspectRepoRunId)
       )
-      c("parentShas").arr.zipWithIndex.foreach { case (p, idx) =>
-        upsertCommitParent(conn, sha, p.str, idx)
-      }
       linkRunCommit(conn, inspectRepoRunId, sha)
     }
   end storeEvidence
@@ -169,22 +158,12 @@ object Store:
 
     json("commits").arr.foreach { c =>
       val sha = c("sha").str
-      // Enriched commits carry no author/committer data (EnrichCommits
-      // strips it), so pass None for those, upsertCommit preserves
-      // whatever was already recorded from an earlier evidence-file store
-      // rather than overwriting it with null.
       upsertCommit(
         conn,
         sha,
         repoId,
         c("shortMessage").str,
         c("fullMessage").str,
-        authorName = None,
-        authorEmail = None,
-        authorDate = None,
-        committerName = None,
-        committerEmail = None,
-        committerDate = None,
         firstSeenInspectRepoRunId = None
       )
 
@@ -345,7 +324,6 @@ object Store:
       inspectCommitsRunId = inspectCommitsRunId,
       bugTarget = json("bugTarget").num.toInt,
       examinedCommitCount = json("examinedCommitCount").num.toInt,
-      scannedCommitCount = json("scannedCommitCount").num.toInt,
       stoppedEarly = json("stoppedEarly").bool,
       sourceFile = filePath
     )
@@ -372,17 +350,82 @@ object Store:
   // Per-table upserts
   // ---------------------------------------------------------------------
 
-  /** `private[mini]`: also called directly by `SearchRepos`, a discovered
-    * repository is upserted into the one shared `repositories` table the
-    * same way a mined one is, so a repo found by search and later mined by
-    * `/inspect_repo` is the same row, not two.
+  /** `private[mini]`: also called directly by `SearchRepos` and
+    * `QualifyRepos`, a discovered repository is upserted into the one
+    * shared `repositories` table the same way a mined one is, so a repo
+    * found by search and later mined by `/inspect_repo` is the same row,
+    * not two. `description`/`repoCreatedAt`/`forksCount`/`topics`/
+    * `defaultBranch` are stable identity-ish facts either `search-repos`
+    * or `qualify-repos` might see first, `COALESCE`-preserved so whichever
+    * one runs second doesn't null out what the first already recorded.
+    *
+    * `currentStars` through `currentLicense` are the single source of
+    * truth for "what does this repository currently look like", written
+    * by both `search-repos` and `qualify-repos` every time either one
+    * observes a repository, also `COALESCE`-preserved: since both callers
+    * always have real values for these (never intentionally `None`), the
+    * `COALESCE` means whichever of the two ran more recently simply wins,
+    * with no timestamp bookkeeping needed, while still never letting a
+    * data-less call (there isn't one today, but the pattern protects
+    * against a future one) wipe out what's already recorded. This used to
+    * live only on `qualify-repos`'s own columns, duplicating
+    * `search_repos_run_repositories`'s per-search snapshot with nothing
+    * reconciling the two, so the results table and the one-repo detail
+    * view could disagree; now both write here, and it's the only place
+    * "current" is read from.
     */
-  private[mini] def upsertRepository(conn: Connection, owner: String, repo: String, url: String): Long =
+  private[mini] def upsertRepository(
+      conn: Connection,
+      owner: String,
+      repo: String,
+      url: String,
+      description: Option[String] = None,
+      repoCreatedAt: Option[String] = None,
+      forksCount: Option[Int] = None,
+      topics: List[String] = Nil,
+      defaultBranch: Option[String] = None,
+      currentStars: Option[Int] = None,
+      currentLanguage: Option[String] = None,
+      currentSizeKb: Option[Int] = None,
+      currentArchived: Option[Boolean] = None,
+      currentFork: Option[Boolean] = None,
+      currentLicense: Option[String] = None
+  ): Long =
     exec(
       conn,
-      "INSERT INTO repositories (owner, repo, url) VALUES (?, ?, ?) " +
-        "ON CONFLICT(owner, repo) DO UPDATE SET url = excluded.url",
-      Seq(owner, repo, url)
+      "INSERT INTO repositories " +
+        "(owner, repo, url, description, repo_created_at, forks_count, topics, default_branch, " +
+        "current_stars, current_language, current_size_kb, current_archived, current_fork, current_license) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(owner, repo) DO UPDATE SET " +
+        "url = excluded.url, " +
+        "description = COALESCE(excluded.description, description), " +
+        "repo_created_at = COALESCE(excluded.repo_created_at, repo_created_at), " +
+        "forks_count = COALESCE(excluded.forks_count, forks_count), " +
+        "topics = COALESCE(excluded.topics, topics), " +
+        "default_branch = COALESCE(excluded.default_branch, default_branch), " +
+        "current_stars = COALESCE(excluded.current_stars, current_stars), " +
+        "current_language = COALESCE(excluded.current_language, current_language), " +
+        "current_size_kb = COALESCE(excluded.current_size_kb, current_size_kb), " +
+        "current_archived = COALESCE(excluded.current_archived, current_archived), " +
+        "current_fork = COALESCE(excluded.current_fork, current_fork), " +
+        "current_license = COALESCE(excluded.current_license, current_license)",
+      Seq(
+        owner,
+        repo,
+        url,
+        description.orNull,
+        repoCreatedAt.orNull,
+        forksCount.map(_.asInstanceOf[Any]).orNull,
+        if topics.isEmpty then null else topics.mkString(","),
+        defaultBranch.orNull,
+        currentStars.map(_.asInstanceOf[Any]).orNull,
+        currentLanguage.orNull,
+        currentSizeKb.map(_.asInstanceOf[Any]).orNull,
+        currentArchived.map(_.asInstanceOf[Any]).orNull,
+        currentFork.map(_.asInstanceOf[Any]).orNull,
+        currentLicense.orNull
+      )
     )
     queryId(conn, "SELECT id FROM repositories WHERE owner = ? AND repo = ?", Seq(owner, repo))
 
@@ -459,23 +502,21 @@ object Store:
       inspectCommitsRunId: Option[Long],
       bugTarget: Int,
       examinedCommitCount: Int,
-      scannedCommitCount: Int,
       stoppedEarly: Boolean,
       sourceFile: String
   ): Long =
     exec(
       conn,
       "INSERT INTO classify_bugs_runs " +
-        "(run_id, inspect_commits_run_id, bug_target, examined_commit_count, scanned_commit_count, stopped_early, source_file, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
+        "(run_id, inspect_commits_run_id, bug_target, examined_commit_count, stopped_early, source_file, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, datetime('now')) " +
         "ON CONFLICT(run_id) DO UPDATE SET " +
         "inspect_commits_run_id = excluded.inspect_commits_run_id, " +
         "bug_target = excluded.bug_target, " +
         "examined_commit_count = excluded.examined_commit_count, " +
-        "scanned_commit_count = excluded.scanned_commit_count, " +
         "stopped_early = excluded.stopped_early, " +
         "source_file = excluded.source_file",
-      Seq(runId, inspectCommitsRunId.map(_.asInstanceOf[Any]).orNull, bugTarget, examinedCommitCount, scannedCommitCount, stoppedEarly, sourceFile)
+      Seq(runId, inspectCommitsRunId.map(_.asInstanceOf[Any]).orNull, bugTarget, examinedCommitCount, stoppedEarly, sourceFile)
     )
     queryId(conn, "SELECT id FROM classify_bugs_runs WHERE run_id = ?", Seq(runId))
 
@@ -485,56 +526,30 @@ object Store:
       repositoryId: Long,
       shortMessage: String,
       fullMessage: String,
-      authorName: Option[String],
-      authorEmail: Option[String],
-      authorDate: Option[String],
-      committerName: Option[String],
-      committerEmail: Option[String],
-      committerDate: Option[String],
       firstSeenInspectRepoRunId: Option[Long]
   ): Unit =
     exec(
       conn,
       "INSERT INTO commits " +
-        "(sha, repository_id, short_message, full_message, author_name, author_email, author_date, committer_name, committer_email, committer_date, first_seen_inspect_repo_run_id) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+        "(sha, repository_id, short_message, full_message, first_seen_inspect_repo_run_id) " +
+        "VALUES (?, ?, ?, ?, ?) " +
         "ON CONFLICT(sha) DO UPDATE SET " +
         "short_message = excluded.short_message, " +
         "full_message = excluded.full_message, " +
-        "author_name = COALESCE(excluded.author_name, author_name), " +
-        "author_email = COALESCE(excluded.author_email, author_email), " +
-        "author_date = COALESCE(excluded.author_date, author_date), " +
-        "committer_name = COALESCE(excluded.committer_name, committer_name), " +
-        "committer_email = COALESCE(excluded.committer_email, committer_email), " +
-        "committer_date = COALESCE(excluded.committer_date, committer_date), " +
         "first_seen_inspect_repo_run_id = COALESCE(first_seen_inspect_repo_run_id, excluded.first_seen_inspect_repo_run_id)",
       Seq(
         sha,
         repositoryId,
         shortMessage,
         fullMessage,
-        authorName.orNull,
-        authorEmail.orNull,
-        authorDate.orNull,
-        committerName.orNull,
-        committerEmail.orNull,
-        committerDate.orNull,
         firstSeenInspectRepoRunId.map(_.asInstanceOf[Any]).orNull
       )
-    )
-
-  private def upsertCommitParent(conn: Connection, commitSha: String, parentSha: String, parentOrder: Int): Unit =
-    exec(
-      conn,
-      "INSERT INTO commit_parents (commit_sha, parent_sha, parent_order) VALUES (?, ?, ?) " +
-        "ON CONFLICT(commit_sha, parent_order) DO UPDATE SET parent_sha = excluded.parent_sha",
-      Seq(commitSha, parentSha, parentOrder)
     )
 
   private def linkRunCommit(conn: Connection, inspectRepoRunId: Long, commitSha: String): Unit =
     exec(
       conn,
-      "INSERT INTO run_commits (inspect_repo_run_id, commit_sha) VALUES (?, ?) " +
+      "INSERT INTO inspect_repo_run_commits (inspect_repo_run_id, commit_sha) VALUES (?, ?) " +
         "ON CONFLICT(inspect_repo_run_id, commit_sha) DO NOTHING",
       Seq(inspectRepoRunId, commitSha)
     )

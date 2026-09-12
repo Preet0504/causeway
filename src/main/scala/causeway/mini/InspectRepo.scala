@@ -1,7 +1,7 @@
 package causeway.mini
 
 import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib.{ObjectId, PersonIdent, Repository}
+import org.eclipse.jgit.lib.{ObjectId, Repository}
 import org.eclipse.jgit.revwalk.{RevCommit, RevSort, RevWalk}
 
 import java.io.File
@@ -21,14 +21,12 @@ import scala.jdk.CollectionConverters.*
   * the default may be exactly what's wanted. Every run is explicit about
   * both, driven by an orchestrator that lists the real options and lets a
   * person choose, rather than the tool silently picking one. Runs as one
-  * of five modes, selected by `--mode`:
+  * of four modes, selected by `--mode`:
   *
-  *   - `validate --repo-url <url>`: checks whether the URL names a real
-  *     GitHub repository (prints `VALID=true` or `VALID=false`), the
-  *     network call `/run_causeway` used to make itself via a raw `curl`.
-  *     Nothing is cloned, this runs before a repo is committed to at all.
   *   - `list-remotes`: clone (or open an existing clone) and print every
-  *     configured remote's name and URL. Nothing is fetched yet.
+  *     configured remote's name and URL. A bad URL fails here, this is
+  *     also how a repo URL gets validated, there's no separate step for
+  *     that. Nothing is fetched yet.
   *   - `list-branches --remote-name <name>`: fetch from that remote, look
   *     up its configured URL, and print every branch GitHub reports for
   *     that repository, each with its current commit SHA, flagging
@@ -61,51 +59,17 @@ object InspectRepo:
   def run(args: Array[String]): Unit =
     val opts = parseArgs(args)
     val token = sys.env.getOrElse("GITHUB_TOKEN", fail("GITHUB_TOKEN environment variable is required"))
+    val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
+    val (owner, repo) = parseOwnerRepo(repoUrl)
+    val workspaceDir = new File(s"workspace/$owner-$repo")
 
-    if opts.getOrElse("mode", fail("--mode is required (validate, list-remotes, list-branches, count, or write)")) == "validate" then
-      val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
-      val (owner, repo) = parseOwnerRepo(repoUrl)
-      runValidate(owner, repo, token)
-    else
-      val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
-      val (owner, repo) = parseOwnerRepo(repoUrl)
-      val workspaceDir = new File(s"workspace/$owner-$repo")
-
-      opts("mode") match
-        case "list-remotes"  => runListRemotes(repoUrl, workspaceDir)
-        case "list-branches" => runListBranches(workspaceDir, opts, token)
-        case "count"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = false)
-        case "write"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = true)
-        case other            => fail(s"Unknown --mode '$other'")
+    opts.getOrElse("mode", fail("--mode is required (list-remotes, list-branches, count, or write)")) match
+      case "list-remotes"  => runListRemotes(repoUrl, workspaceDir)
+      case "list-branches" => runListBranches(workspaceDir, opts, token)
+      case "count"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = false)
+      case "write"          => runInspect(repoUrl, owner, repo, workspaceDir, opts, writeEvidence = true)
+      case other            => fail(s"Unknown --mode '$other'")
   end run
-
-  // ---------------------------------------------------------------------
-  // Mode: validate
-  // ---------------------------------------------------------------------
-
-  /** Checks whether a repo URL actually names a real GitHub repository,
-    * the network call `/run_causeway` used to make itself via a raw
-    * `curl`, before it knew a repo URL was even worth acting on further.
-    * Deliberately does not clone anything, this runs before a person has
-    * committed to mining a specific repo at all.
-    */
-  private def runValidate(owner: String, repo: String, token: String): Unit =
-    val client = HttpClient.newBuilder().connectTimeout(JDuration.ofSeconds(15)).build()
-    val request = HttpRequest
-      .newBuilder()
-      .uri(URI.create(s"$GitHubApiBase/repos/$owner/$repo"))
-      .header("Accept", "application/vnd.github+json")
-      .header("Authorization", s"Bearer $token")
-      .timeout(JDuration.ofSeconds(30))
-      .GET()
-      .build()
-    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-    response.statusCode() match
-      case 200 => println("VALID=true")
-      case 404 => println("VALID=false")
-      case status =>
-        fail(s"GitHub API request to validate $owner/$repo failed with status $status: ${response.body().take(500)}")
-  end runValidate
 
   // ---------------------------------------------------------------------
   // Mode: list-remotes
@@ -229,21 +193,12 @@ object InspectRepo:
       git.close()
       println(s"WINDOW_COMMIT_COUNT=${windowCommits.size}")
     else
-      def personObj(p: PersonIdent) =
-        ujson.Obj(
-          "name" -> p.getName,
-          "email" -> p.getEmailAddress,
-          "date" -> p.getWhenAsInstant.toString
-        )
-
       val commitArr = ujson.Arr.from(
         windowCommits.map { c =>
           ujson.Obj(
             "sha" -> c.getName,
             "shortMessage" -> c.getShortMessage,
             "fullMessage" -> c.getFullMessage,
-            "author" -> personObj(c.getAuthorIdent),
-            "committer" -> personObj(c.getCommitterIdent),
             "commitDate" -> Instant.ofEpochSecond(c.getCommitTime.toLong).toString,
             "parentShas" -> ujson.Arr.from(c.getParents.toList.map(_.getName))
           )
@@ -292,7 +247,8 @@ object InspectRepo:
     else
       System.err.println(s"Cloning $repoUrl into ${workspaceDir.getPath} ...")
       workspaceDir.getParentFile.mkdirs()
-      Git.cloneRepository().setURI(repoUrl).setDirectory(workspaceDir).call()
+      try Git.cloneRepository().setURI(repoUrl).setDirectory(workspaceDir).call()
+      catch case e: Exception => fail(s"Could not clone $repoUrl: ${e.getMessage}")
 
   /** Every commit reachable from `startPoint` whose commit time is at or
     * after `sinceEpochSeconds`, newest first. Does not stop early: Git

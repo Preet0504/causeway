@@ -24,26 +24,33 @@ object Causeway:
     val subcommand = args(0)
     val rest = args.drop(1)
     subcommand match
-      case "search-repos"     => SearchRepos.run(rest)
-      case "qualify-repos"    => QualifyRepos.run(rest)
-      case "inspect-repo"     => InspectRepo.run(rest)
-      case "inspect-commits"  => EnrichCommits.run(rest)
-      case "store"            => Store.run(rest)
-      case "-h" | "--help"    => println(usage)
-      case other              => fail(s"Unknown subcommand '$other'.\n\n$usage")
+      case "search-repos"          => SearchRepos.run(rest)
+      case "qualify-repos"         => QualifyRepos.run(rest)
+      case "list-qualifying-repos" => ListQualifyingRepos.run(rest)
+      case "repo-details"          => RepoDetails.run(rest)
+      case "inspect-repo"          => InspectRepo.run(rest)
+      case "inspect-commits"       => EnrichCommits.run(rest)
+      case "store"                 => Store.run(rest)
+      case "-h" | "--help"         => println(usage)
+      case other                   => fail(s"Unknown subcommand '$other'.\n\n$usage")
 
   private def usage: String =
     """Usage: causeway <subcommand> [args...]
       |
       |Subcommands:
-      |  search-repos       Discover candidate repositories from a structured search specification,
-      |                     inserted into the SQLite catalog directly as they're found.
-      |  qualify-repos      Cheaply check discovered repositories (issues enabled, candidate issues/PRs
-      |                     exist, likely test presence) before anything clones them.
-      |  inspect-repo       Validate a repo URL, discover its remotes/branches, and extract a commit
-      |                     window as evidence. Modes: --mode validate | list-remotes | list-branches | count | write
-      |  inspect-commits    Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
-      |  store              Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
+      |  search-repos          Discover candidate repositories from a structured search specification,
+      |                        inserted into the SQLite catalog directly as they're found.
+      |  qualify-repos         Cheaply check discovered repositories (issues enabled, candidate issues/PRs
+      |                        exist, likely test presence) before anything clones them.
+      |  list-qualifying-repos List every currently-qualifying repository ever discovered, most starred
+      |                        first, up to --limit, whether or not it's been mined yet.
+      |  repo-details          Look up everything the catalog knows about one repository (description,
+      |                        topics, license, creation date, archived/fork status), for the moment
+      |                        someone actually picks it to mine.
+      |  inspect-repo          Discover a repo's remotes/branches and extract a commit window as evidence.
+      |                        Modes: --mode list-remotes | list-branches | count | write
+      |  inspect-commits       Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
+      |  store                 Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
       |""".stripMargin
 
   private def fail(msg: String): Nothing =
