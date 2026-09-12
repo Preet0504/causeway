@@ -24,6 +24,7 @@ object Causeway:
     val subcommand = args(0)
     val rest = args.drop(1)
     subcommand match
+      case "search-repos"     => SearchRepos.run(rest)
       case "inspect-repo"     => InspectRepo.run(rest)
       case "inspect-commits"  => EnrichCommits.run(rest)
       case "store"            => Store.run(rest)
@@ -34,10 +35,12 @@ object Causeway:
     """Usage: causeway <subcommand> [args...]
       |
       |Subcommands:
-      |  inspect-repo      Discover a repo's remotes/branches and extract a commit window as evidence.
-      |                    Modes: --mode list-remotes | list-branches | count | write
-      |  inspect-commits   Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
-      |  store             Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
+      |  search-repos       Discover candidate repositories from a structured search specification,
+      |                     inserted into the SQLite catalog directly as they're found.
+      |  inspect-repo       Discover a repo's remotes/branches and extract a commit window as evidence.
+      |                     Modes: --mode list-remotes | list-branches | count | write
+      |  inspect-commits    Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
+      |  store              Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
       |""".stripMargin
 
   private def fail(msg: String): Nothing =

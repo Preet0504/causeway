@@ -65,6 +65,54 @@ CREATE TABLE IF NOT EXISTS classify_bugs_runs (
   created_at TEXT NOT NULL
 );
 
+-- One row per `search-repos` invocation, capturing the exact structured
+-- search specification that produced its results (language, minimum
+-- stars, activity window, size bounds, fork/archived status, topics,
+-- license, and the requested result cap), so a discovered repository can
+-- always be traced back to exactly what was asked for. `topics` is stored
+-- as a single comma-joined column rather than a separate join table: it's
+-- part of one search's own specification, not a reusable dimension shared
+-- across searches, so normalizing it further would add a table without
+-- adding any real query power. Unlike the other three run tables, there is
+-- no `source_file`: search-repos has no JSON output, its results are
+-- inserted into the database directly as they're paginated.
+CREATE TABLE IF NOT EXISTS search_repos_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL UNIQUE,
+  language TEXT,
+  min_stars INTEGER,
+  pushed_within_months INTEGER,
+  pushed_since_date TEXT,
+  min_size_kb INTEGER,
+  max_size_kb INTEGER,
+  fork_status TEXT,
+  archived_status TEXT,
+  topics TEXT,
+  license TEXT,
+  max_results INTEGER NOT NULL,
+  result_count INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- Many-to-many between a search run and the repositories it found, mirrors
+-- `run_commits`: the same repository can legitimately be rediscovered by a
+-- later, differently-specified search, and each discovery should keep its
+-- own point-in-time snapshot (a repo's star count, last-pushed date, and
+-- so on all change over time), rather than one search's write silently
+-- overwriting another's.
+CREATE TABLE IF NOT EXISTS search_run_repositories (
+  search_repos_run_id INTEGER NOT NULL REFERENCES search_repos_runs(id),
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  stars INTEGER,
+  language TEXT,
+  pushed_at TEXT,
+  size_kb INTEGER,
+  is_fork INTEGER,
+  is_archived INTEGER,
+  license TEXT,
+  PRIMARY KEY (search_repos_run_id, repository_id)
+);
+
 CREATE TABLE IF NOT EXISTS commits (
   sha TEXT PRIMARY KEY,
   repository_id INTEGER NOT NULL REFERENCES repositories(id),

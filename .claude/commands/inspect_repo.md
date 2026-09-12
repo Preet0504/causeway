@@ -9,6 +9,8 @@ Run the Causeway Mini repo-inspection flow. Nothing about which remote or which 
 
 If this conversation already has a validated repo URL and window (e.g. from a `/run_causeway` run earlier in this session), use those directly and skip to step 2.
 
+If a repo URL is already known (e.g. picked from a `/discover_repos` run earlier in this session) but no window has been chosen yet, use that URL directly and only ask for the window (the second bullet below), don't re-ask for the URL.
+
 Otherwise, gather them the same way `/run_causeway` does:
 - Ask for the repo URL, verbatim: "What is the url of the repo?" Validate it against GitHub (`curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/<owner>/<repo>"`, must return `200`), re-asking up to 3 total attempts on failure, same as `/run_causeway` step 2.
 - Explain what "window" means (how far back into commit history to look for candidate commits), then offer: Past 1 month / Past 3 months / Past 6 months / Other.

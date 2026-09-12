@@ -4,7 +4,7 @@
 
 Causeway Mini looks through a public GitHub project's history and figures out which past changes were actually bug fixes, as opposed to new features, cleanup, or documentation changes, and explains why it thinks so for each one.
 
-You point it at a repo, tell it how far back in time to look, and it works through the history in stages. It finds the candidate commits, digs up extra context about each one from GitHub (was there a bug report, a pull request discussion), looks at the actual code that changed, and then has a few independent AI reviewers weigh in before settling on a final answer for each commit, stopping once it has found as many genuine bug fixes as you asked for.
+You point it at a repo, tell it how far back in time to look, and it works through the history in stages. It finds the candidate commits, digs up extra context about each one from GitHub (was there a bug report, a pull request discussion), looks at the actual code that changed, and then has a few independent AI reviewers weigh in before settling on a final answer for each commit, stopping once it has found as many genuine bug fixes as you asked for. If you don't already know which repo you want, you can also describe what you're looking for in plain language (language, popularity, activity, and so on) and it searches GitHub for candidates first.
 
 Everything is run through a handful of chat commands, typed one after another, each one picking up where the last left off.
 
@@ -14,6 +14,7 @@ Everything is run through a handful of chat commands, typed one after another, e
 - **sbt 2**: the build tool that compiles and runs the Scala code.
 - **JGit**: a library that lets the Scala code read a git repository's history and compute diffs directly, without needing the `git` command line tool installed separately.
 - **GitHub GraphQL API**: used to fetch the pull requests and issues linked to a commit, straight from GitHub, rather than guessing from the commit message alone.
+- **GitHub REST search API**: used to find candidate repositories from structured criteria (language, stars, activity, and so on), separately from the GraphQL API used once a specific repo is already chosen.
 - **upickle/ujson**: a small library for reading and writing the JSON files this project passes between its stages.
 - **SQLite (via the `sqlite-jdbc` driver)**: a repository catalog, `workspace/causeway.db`, that every stage's JSON output also gets stored into, so the data can be queried directly (which commits, across every run ever done, are linked to a given issue?) instead of only ever being read one JSON file at a time.
 - **Claude Code commands and subagents**: the chat commands (`/run_causeway`, etc.) and the AI reviewers are plain instruction files that Claude Code reads and follows, no extra framework needed.
@@ -32,6 +33,10 @@ The single compiled entry point for everything. Rather than each tool having its
 ### `tools/causeway`
 
 The launcher script the chat commands actually call: `tools/causeway inspect-repo --mode list-remotes ...`. It runs `java` directly against already-compiled classes and a cached classpath, no `sbt` involved. The first time it's run after a source file or `build.sbt` changes, it notices (by comparing file timestamps against its cache), recompiles once, and refreshes the cache automatically, every other invocation just runs, typically under a second of pure JVM startup instead of sbt's several-second build-server round trip.
+
+### `src/main/scala/causeway/mini/SearchRepos.scala`
+
+This is the tool behind the `search-repos` subcommand, for when you don't already know which repo you want. It takes structured flags (language, minimum stars, how recently active, size, fork/archived status, topics, license, and a result cap), builds them into GitHub's repository search qualifier syntax, and pages through results (100 at a time, GitHub's own maximum, up to its overall 1000-result ceiling regardless of what's asked for). Unlike the other three pipeline tools, it writes no JSON file: every discovered repository is inserted straight into `workspace/causeway.db` as it's found, tagged with the exact search specification (as a `search_repos_runs` row) that discovered it, so results are traceable back to precisely what was searched for even without a JSON file to point to. It does not do the job of turning a person's plain-language request ("popular, actively-maintained Java repos") into these flags, that translation is the `repo-discovery` agent's job, this tool only ever does exactly what its flags say.
 
 ### `src/main/scala/causeway/mini/InspectRepo.scala`
 
@@ -57,11 +62,19 @@ This is the tool behind the `inspect-commits` subcommand. Internally it:
 
 ### `src/main/resources/schema.sql`
 
-The SQLite schema for the repository catalog: repositories, repository snapshots, one run table per pipeline stage (`inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`), commits, commit parents, a `run_commits` join table, pull requests, issues, a typed `relations` table (a `relation_type` column distinguishes, for example, a commit belonging to a PR from that PR closing an issue, rather than collapsing every commit/PR/issue connection into one generic fact, see "How a commit connects to a PR or an issue" below), and bug classifications, plus three empty stub tables (`test_observations`, `materialized_revisions`, `build_runs`) reserved for capabilities that don't exist yet. Every table with a natural key (a repo's `owner`+`repo`, a run's `run_id`, a commit's `sha`) is meant to be upserted into, never plain-inserted.
+The SQLite schema for the repository catalog: repositories, repository snapshots, one run table per pipeline stage (`search_repos_runs`, `inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`), a `search_run_repositories` join table (a discovered repository's stars/language/activity/etc. at the moment a particular search found it, mirroring `run_commits`'s "the same thing can be rediscovered by a different run" design), commits, commit parents, a `run_commits` join table, pull requests, issues, a typed `relations` table (a `relation_type` column distinguishes, for example, a commit belonging to a PR from that PR closing an issue, rather than collapsing every commit/PR/issue connection into one generic fact, see "How a commit connects to a PR or an issue" below), and bug classifications, plus three empty stub tables (`test_observations`, `materialized_revisions`, `build_runs`) reserved for capabilities that don't exist yet. Every table with a natural key (a repo's `owner`+`repo`, a run's `run_id`, a commit's `sha`) is meant to be upserted into, never plain-inserted.
 
 ### `src/main/scala/causeway/mini/Store.scala`
 
 This is the tool behind the `store` subcommand. It takes any one JSON file any of the three pipeline stages produced, figures out which of the three it is by which fields are present (no separate flag needed), and upserts its contents into `workspace/causeway.db`. Storing the same file twice, or storing two different runs against the same repository, updates or reuses existing rows rather than creating duplicates, one run mining the same repo with a different time window than an earlier run doesn't get merged with it or corrupt it, both runs' results sit side by side, sharing only the one `repositories` row underneath. This is additive alongside the JSON files, not a replacement for them, `/inspect_commits` and `/classify_bugs` still read the previous stage's JSON file directly and in full.
+
+### `.claude/agents/repo-discovery.md`
+
+The instructions given to the repository discovery agent. It has access to exactly one tool, Bash, and is told, explicitly, to use it for exactly one purpose: running `tools/causeway search-repos ...`. No `curl`, no `git clone`, no writing to the database directly, no classifying commits, no builds, those are all other tools' and agents' jobs. Its own job is entirely translation: turning a plain-language description ("popular, actively-maintained Java repos") into the tool's structured flags, filling in only what the description actually implies, and asking rather than guessing at a number when "popular" or "small" isn't given a concrete threshold.
+
+### `.claude/commands/discover_repos.md`
+
+Instructions that say: ask what kind of repository the user is looking for, in plain language, and how many candidates they want, hand that straight to the `repo-discovery` agent (the command itself never constructs search flags), show the results in a table alongside which flags were actually used, and offer to remember a chosen repo's URL for `/inspect_repo`. This is a separate, optional entry point, not a step in the middle of the usual flow, `/run_causeway` is still how you start once you already know exactly which repo you want.
 
 ### `.claude/commands/run_causeway.md`
 
@@ -86,6 +99,38 @@ The instructions given to each AI reviewer. They describe the three things to lo
 ## The commands, in order
 
 Each command is typed into the chat, for example `/run_causeway`. Every command ends by telling you what to run next, and by telling you how to redo that step if something looks wrong.
+
+### 0. `/discover_repos` (optional, only if you don't already know which repo to mine)
+
+What happens, step by step:
+
+The command asks what kind of repository you're looking for, in plain language, giving a few examples of what you can mention (language, popularity, activity, size, forks, archived status, topics, license), and how many candidates you'd like at most. It hands that description straight to the `repo-discovery` agent, which translates it into `search-repos`'s structured flags and runs it, GitHub's repository search API does the actual finding. Every result is inserted into `workspace/causeway.db` immediately, tagged with the exact search that found it.
+
+Example output:
+
+```
+What kind of repository are you looking for?
+(e.g. language, popularity, how actively maintained, size, forks,
+archived status, topics, license)
+```
+
+You answer, say, "Small, actively-maintained JSON parsing libraries in Java, not forks, at most 10." Then:
+
+```
+Searched with: language:Java topic:json pushed:>=2026-03-11 fork:false
+Found 6 of up to 10 candidates:
+
+| repo                    | stars | language | url |
+|-------------------------|-------|----------|-----|
+| stleary/JSON-java       | 5400  | Java     | https://github.com/stleary/JSON-java |
+| ...                     | ...   | ...      | ... |
+
+Would you like to mine one of these next? If so, run /inspect_repo
+(or /run_causeway to also pick a different time window), it'll use
+that repo directly.
+
+If anything above is wrong, just run /discover_repos again to start over.
+```
 
 ### 1. `/run_causeway`
 
@@ -290,10 +335,33 @@ WHERE bc.verdict = 1;
 
 Currently populated relation types: `commit_belongs_to_pr`, `pr_closes_issue`, and `commit_message_references_issue` (a raw `#123`-shaped match in the commit's own message, unconfirmed by GitHub, kept separate from anything GitHub itself has resolved). A few more (`commit_mentions_issue`, `pr_references_issue`, `issue_mentions_commit_sha`) are designed for but not implemented yet, they need fetching data this pipeline doesn't fetch today (an issue's own timeline events and comment text, not just the commit → PR → issue chain).
 
+### Discovered repositories
+
+`/discover_repos` writes to the catalog directly, there's no JSON file and no separate `store` step for it. `search_repos_runs` holds the exact specification of each search (language, minimum stars, activity window, size bounds, fork/archived status, topics, license, and the requested result cap); `search_run_repositories` links that search to every repository it found, each with a snapshot of that repository's stars/language/last-pushed-date/etc. *at the moment that search found it*, since those change over time and a repository can legitimately be rediscovered by a later, differently-specified search. For example, this finds every repository any search has ever surfaced with at least 10,000 stars, and which searches found each one:
+
+```sql
+SELECT r.owner, r.repo, srr.stars, sr.language, sr.min_stars, sr.created_at
+FROM search_run_repositories srr
+JOIN repositories r ON r.id = srr.repository_id
+JOIN search_repos_runs sr ON sr.id = srr.search_repos_run_id
+WHERE srr.stars >= 10000
+ORDER BY srr.stars DESC;
+```
+
 ## How it all fits together
 
 ```mermaid
 flowchart TD
+    DR0["/discover_repos (optional)<br/>describe what you're looking for"]
+    REPODISC(("repo-discovery<br/>agent"))
+    DR0 --> REPODISC
+    DB[(workspace/causeway.db)]
+    GHSEARCH{{GitHub search API}}
+    REPODISC -- "structured search flags" --> GHSEARCH
+    GHSEARCH -- "candidate repos" --> REPODISC
+    REPODISC -. "store immediately" .-> DB
+    REPODISC -- "pick one" --> RC
+
     RC["/run_causeway<br/>ask for repo URL + time window"]
     GH1{{GitHub}}
     RC -- "repo URL" --> GH1
@@ -339,12 +407,13 @@ flowchart TD
     RESULT -. "store" .-> DB
 ```
 
-Reading it top to bottom: `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL. `/inspect_repo` downloads or opens the repo, shows you its actual remotes and lets you pick one, then shows you that remote's actual branches (via GitHub) and lets you pick one, then lists the commits in your time window from that exact choice and asks for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file. Each of the three JSON files (dashed arrows above) also gets stored into the SQLite catalog as it's produced, so the data ends up queryable directly, not just readable one file at a time.
+Reading it top to bottom: `/discover_repos`, if you use it, describes what you're looking for in plain language, the `repo-discovery` agent translates that into structured search flags and runs the search, and every result is stored right away, not just whichever one you go on to pick. `/run_causeway` gets your repo and time window, checking the repo against GitHub as it goes, retrying up to 3 times on a bad URL (if you picked a repo from `/discover_repos`, its URL is already known here). `/inspect_repo` downloads or opens the repo, shows you its actual remotes and lets you pick one, then shows you that remote's actual branches (via GitHub) and lets you pick one, then lists the commits in your time window from that exact choice and asks for a scan commit limit once you can see how many there are. The output is a JSON file that every later step builds on. `/inspect_commits` adds GitHub's own context (linked pull requests and issues) and the real code differences for each commit. `/classify_bugs` asks for a bug target, then works through the commits in small groups, newest first, one group at a time, checking after each group whether enough genuine bug fixes have been found and stopping as soon as they have. What it actually examined ends up as a table and one complete file. Each of the three JSON files (dashed arrows above) also gets stored into the SQLite catalog as it's produced, so the data ends up queryable directly, not just readable one file at a time.
 
 ## Running the whole workflow
 
 1. Make sure `.env` exists at the project root with a valid `GITHUB_TOKEN` in it.
 2. Open this project in Claude Code.
+2a. Don't already have a specific repo in mind? Type `/discover_repos` first, describe what you're looking for, and pick one of the results. Skip this if you already know the repo.
 3. Type `/run_causeway` and answer its two questions: the repo URL and the time window.
 4. Type `/inspect_repo`. Confirm or choose the remote if there's more than one, confirm or choose the branch to mine, then answer its question about the scan commit limit once it shows you the commit count.
 5. Type `/inspect_commits` and let it run. No questions this time, it reuses everything from before.

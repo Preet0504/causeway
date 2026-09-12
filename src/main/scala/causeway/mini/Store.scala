@@ -70,7 +70,12 @@ object Store:
 
     kind
 
-  private def applySchema(conn: Connection): Unit =
+  /** `private[mini]`, not `private`: `SearchRepos` also opens a connection
+    * to `workspace/causeway.db` directly (it inserts discovered repos as it
+    * paginates, rather than writing a JSON file for a later `store` call),
+    * and reuses this rather than duplicating schema application.
+    */
+  private[mini] def applySchema(conn: Connection): Unit =
     val schemaText = Source.fromResource("schema.sql").mkString
     // Strip `--` line comments before splitting on `;`, a leading comment
     // block followed immediately by a statement (no blank statement
@@ -270,7 +275,12 @@ object Store:
   // Per-table upserts
   // ---------------------------------------------------------------------
 
-  private def upsertRepository(conn: Connection, owner: String, repo: String, url: String): Long =
+  /** `private[mini]`: also called directly by `SearchRepos`, a discovered
+    * repository is upserted into the one shared `repositories` table the
+    * same way a mined one is, so a repo found by search and later mined by
+    * `/inspect_repo` is the same row, not two.
+    */
+  private[mini] def upsertRepository(conn: Connection, owner: String, repo: String, url: String): Long =
     exec(
       conn,
       "INSERT INTO repositories (owner, repo, url) VALUES (?, ?, ?) " +
@@ -564,7 +574,7 @@ object Store:
   // Generic JDBC plumbing
   // ---------------------------------------------------------------------
 
-  private def exec(conn: Connection, sql: String, params: Seq[Any]): Unit =
+  private[mini] def exec(conn: Connection, sql: String, params: Seq[Any]): Unit =
     val ps = conn.prepareStatement(sql)
     try
       bind(ps, params)
@@ -572,7 +582,7 @@ object Store:
       ()
     finally ps.close()
 
-  private def queryId(conn: Connection, sql: String, params: Seq[Any]): Long =
+  private[mini] def queryId(conn: Connection, sql: String, params: Seq[Any]): Long =
     val ps = conn.prepareStatement(sql)
     try
       bind(ps, params)
