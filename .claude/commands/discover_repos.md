@@ -19,16 +19,28 @@ Before invoking it, make sure `GITHUB_TOKEN` is available the same way `/inspect
 
 If the agent reports a failure, or that the requirements were too vague to translate into a meaningful search, relay that plainly and ask a clarifying question rather than guessing at flags yourself.
 
-## 3. Show the results
+## 3. Qualify the results before showing them
 
-Render a markdown table of what was found: owner/repo, stars, language, and URL, using the agent's reported results directly, don't re-run anything to get this. State plainly which flags were actually used to search (the agent should have told you), so the person can tell whether their requirements were translated the way they expected.
+Read the `SEARCH_RUN_ID` the agent reported, then run this yourself directly, don't delegate it to the agent, there's no translation judgment call involved here, just a fixed check:
 
-If the result count is small or zero, say so plainly and suggest, based on which flags were used, which one is most likely too narrow, don't present a thin or empty result set as if it were a complete or expected answer.
+```bash
+tools/causeway qualify-repos --search-run-id <search-run-id>
+```
 
-## 4. Offer to continue
+This cheaply checks each discovered repository against GitHub (whether issues are enabled, whether it has any closed issue or merged pull request, and whether its file tree looks like it contains tests) *before* anyone clones anything. A repository with issues disabled, or with no closed issue and no merged pull request ever, cannot produce the kind of evidence this pipeline looks for no matter how it's mined, that's a hard rejection. Whether it appears to have tests is a much softer, pattern-matched signal (real tests can live somewhere this doesn't recognize), it's shown for information but never causes a rejection on its own.
 
-Ask whether they'd like to mine one of these repositories next. If they pick one, remember its URL for this session and tell them to run `/inspect_repo` (or `/run_causeway` if they also want to choose a different time window first), which will pick up that URL directly rather than asking for it again.
+Read each `QUALIFY owner=... repo=... qualifies=true|false reason=...` line.
 
-Every discovered repository (not just the one picked) is already stored in `workspace/causeway.db`, tied to the exact search specification that found it, whether or not it's mined further right now.
+## 4. Show the results
+
+Render a markdown table of what was found: owner/repo, stars, language, qualifies (yes/no), and, for anything that didn't qualify, the reason why, using the search and qualification results directly, don't re-run anything to get this. State plainly which search flags were actually used (the agent should have told you), so the person can tell whether their requirements were translated the way they expected.
+
+If the result count is small or zero, or nothing qualified, say so plainly and suggest, based on which flags were used, which one is most likely too narrow, don't present a thin, empty, or all-rejected result set as if it were a complete or expected answer.
+
+## 5. Offer to continue
+
+Ask whether they'd like to mine one of these repositories next, steering them toward the ones that qualified (mention plainly if they pick one that didn't, that it has no possible bug-fix evidence source or has issues disabled, but don't refuse if they insist). If they pick one, remember its URL for this session and tell them to run `/inspect_repo` (or `/run_causeway` if they also want to choose a different time window first), which will pick up that URL directly rather than asking for it again.
+
+Every discovered repository (not just the one picked), and its qualification result, is already stored in `workspace/causeway.db`, tied to the exact search specification that found it, whether or not it's mined further right now.
 
 End the message with: "If anything above is wrong, just run /discover_repos again to start over."

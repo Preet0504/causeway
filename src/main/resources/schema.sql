@@ -113,6 +113,32 @@ CREATE TABLE IF NOT EXISTS search_run_repositories (
   PRIMARY KEY (search_repos_run_id, repository_id)
 );
 
+-- One row per repository, the CURRENT answer to "is this worth cloning",
+-- re-checking replaces the row rather than layering a historical record
+-- the way search_run_repositories does: nothing depends on reproducing a
+-- stale qualification check, only on the latest one. Cheap, pre-clone
+-- signals only, no cloning involved: has_issues and the closed-issue/
+-- merged-PR counts come from repo metadata and the search API,
+-- appears_to_have_tests comes from pattern-matching file paths in the
+-- default branch's tree (fetched in one request, no file content, no
+-- clone). appears_to_have_tests is a soft, heuristic signal (a repo could
+-- easily have tests in an unconventional location this doesn't recognize)
+-- so it is recorded but does not by itself fail `qualifies`; has_issues
+-- being false, or having no closed issues and no merged PRs at all (no
+-- possible source of bug-fix evidence), are the two hard disqualifiers.
+CREATE TABLE IF NOT EXISTS repository_qualifications (
+  repository_id INTEGER PRIMARY KEY REFERENCES repositories(id),
+  has_issues INTEGER NOT NULL,
+  closed_issue_count INTEGER NOT NULL,
+  merged_pr_count INTEGER NOT NULL,
+  appears_to_have_tests INTEGER NOT NULL,
+  test_evidence_paths TEXT,
+  tree_truncated INTEGER NOT NULL,
+  qualifies INTEGER NOT NULL,
+  rejection_reason TEXT,
+  checked_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS commits (
   sha TEXT PRIMARY KEY,
   repository_id INTEGER NOT NULL REFERENCES repositories(id),

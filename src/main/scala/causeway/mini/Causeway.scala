@@ -25,6 +25,7 @@ object Causeway:
     val rest = args.drop(1)
     subcommand match
       case "search-repos"     => SearchRepos.run(rest)
+      case "qualify-repos"    => QualifyRepos.run(rest)
       case "inspect-repo"     => InspectRepo.run(rest)
       case "inspect-commits"  => EnrichCommits.run(rest)
       case "store"            => Store.run(rest)
@@ -37,6 +38,8 @@ object Causeway:
       |Subcommands:
       |  search-repos       Discover candidate repositories from a structured search specification,
       |                     inserted into the SQLite catalog directly as they're found.
+      |  qualify-repos      Cheaply check discovered repositories (issues enabled, candidate issues/PRs
+      |                     exist, likely test presence) before anything clones them.
       |  inspect-repo       Discover a repo's remotes/branches and extract a commit window as evidence.
       |                     Modes: --mode list-remotes | list-branches | count | write
       |  inspect-commits    Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
