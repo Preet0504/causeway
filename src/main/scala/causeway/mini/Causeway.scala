@@ -40,8 +40,8 @@ object Causeway:
       |                     inserted into the SQLite catalog directly as they're found.
       |  qualify-repos      Cheaply check discovered repositories (issues enabled, candidate issues/PRs
       |                     exist, likely test presence) before anything clones them.
-      |  inspect-repo       Discover a repo's remotes/branches and extract a commit window as evidence.
-      |                     Modes: --mode list-remotes | list-branches | count | write
+      |  inspect-repo       Validate a repo URL, discover its remotes/branches, and extract a commit
+      |                     window as evidence. Modes: --mode validate | list-remotes | list-branches | count | write
       |  inspect-commits    Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
       |  store              Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
       |""".stripMargin

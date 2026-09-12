@@ -16,7 +16,7 @@ Everything is run through a handful of chat commands, typed one after another, e
 - **GitHub GraphQL API**: used to fetch the pull requests and issues linked to a commit, straight from GitHub, rather than guessing from the commit message alone.
 - **GitHub REST search API**: used to find candidate repositories from structured criteria (language, stars, activity, and so on), separately from the GraphQL API used once a specific repo is already chosen.
 - **upickle/ujson**: a small library for reading and writing the JSON files this project passes between its stages.
-- **SQLite (via the `sqlite-jdbc` driver)**: a repository catalog, `workspace/causeway.db`, that every stage's JSON output also gets stored into, so the data can be queried directly (which commits, across every run ever done, are linked to a given issue?) instead of only ever being read one JSON file at a time.
+- **SQLite (via the `sqlite-jdbc` driver)**: a repository catalog, `workspace/causeway.db`, that every stage's output gets stored into (either from its own JSON file, or directly as it's produced for the two stages that don't write one), so the data can be queried directly (which commits, across every run ever done, are linked to a given issue?) instead of only ever being read one JSON file at a time.
 - **Claude Code commands and subagents**: the chat commands (`/run_causeway`, etc.) and the AI reviewers are plain instruction files that Claude Code reads and follows, no extra framework needed.
 - **The `causeway` CLI**: a small launcher script that runs the compiled Scala tools directly, no `sbt` involved at invocation time. sbt is still what compiles the code, the launcher just stops the chat commands from needing to go through sbt's build-tool machinery on every single call.
 
@@ -24,11 +24,11 @@ Everything is run through a handful of chat commands, typed one after another, e
 
 ### `build.sbt` and `project/build.properties`
 
-These two files are the project's setup. `build.sbt` says this is a Scala 3 project, lists the two outside libraries it needs (JGit and upickle), and turns on a compiler warning flag. `project/build.properties` pins the exact version of sbt to use, so the build behaves the same on any machine.
+These two files are the project's setup. `build.sbt` says this is a Scala 3 project, lists the outside libraries it needs (JGit, upickle, the `sqlite-jdbc` driver, and MUnit for tests), and turns on a compiler warning flag. `project/build.properties` pins the exact version of sbt to use, so the build behaves the same on any machine.
 
 ### `src/main/scala/causeway/mini/Causeway.scala`
 
-The single compiled entry point for everything. Rather than each tool having its own `main` (which is how `sbt runMain causeway.mini.InspectRepo` used to work, and why sbt kept complaining about "multiple main classes"), this is the only class with a real `main`, and it dispatches on the first argument, `inspect-repo`, `inspect-commits`, `store`, to that capability's own logic. Adding a new capability later means adding one case here, the capability itself doesn't need to know it's part of a CLI.
+The single compiled entry point for everything. Rather than each tool having its own `main` (which is how `sbt runMain causeway.mini.InspectRepo` used to work, and why sbt kept complaining about "multiple main classes"), this is the only class with a real `main`, and it dispatches on the first argument, `search-repos`, `qualify-repos`, `inspect-repo`, `inspect-commits`, `store`, to that capability's own logic. Adding a new capability later means adding one case here, the capability itself doesn't need to know it's part of a CLI.
 
 ### `tools/causeway`
 
@@ -373,8 +373,6 @@ LEFT JOIN relations closes ON closes.relation_type = 'pr_closes_issue' AND close
 LEFT JOIN issues i ON i.id = closes.issue_id
 WHERE bc.verdict = 1;
 ```
-
-Currently populated relation types: `commit_belongs_to_pr`, `pr_closes_issue`, and `commit_message_references_issue` (a raw `#123`-shaped match in the commit's own message, unconfirmed by GitHub, kept separate from anything GitHub itself has resolved). A few more (`commit_mentions_issue`, `pr_references_issue`, `issue_mentions_commit_sha`) are designed for but not implemented yet, they need fetching data this pipeline doesn't fetch today (an issue's own timeline events and comment text, not just the commit → PR → issue chain).
 
 ### Discovered repositories
 
