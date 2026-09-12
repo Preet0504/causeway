@@ -191,7 +191,8 @@ object Store:
           state = Some(pr("state").str),
           firstSeenInspectCommitsRunId = Some(inspectCommitsRunId)
         )
-        linkCommitPullRequest(conn, sha, prId)
+        // The commit genuinely belongs to this PR, that's a per-commit fact.
+        upsertRelation(conn, "commit_belongs_to_pr", commitSha = Some(sha), pullRequestId = Some(prId), issueId = None, evidence = None, inspectCommitsRunId)
 
         pr("closingIssues").arr.foreach { issue =>
           val issueId = upsertIssue(
@@ -202,11 +203,31 @@ object Store:
             url = Some(issue("url").str),
             firstSeenInspectCommitsRunId = Some(inspectCommitsRunId)
           )
-          linkIssueCommit(conn, issueId, sha, Some(prId))
+          // Closing an issue is a fact about the PR as a whole, not about
+          // any one commit inside it (a PR can have several commits and
+          // only one of them, or none directly, actually closes the
+          // issue), so this edge is recorded between the PR and the issue,
+          // with no commit_sha, rather than attributed to every commit
+          // that happens to belong to this PR.
+          upsertRelation(conn, "pr_closes_issue", commitSha = None, pullRequestId = Some(prId), issueId = Some(issueId), evidence = None, inspectCommitsRunId)
         }
+      }
+
+      // A raw `#123`-shaped mention in the commit's own message, distinct
+      // from GitHub's own authoritative issue-mention tracking (not fetched
+      // yet): this is an unconfirmed text match, it doesn't know whether
+      // #123 is really an issue or a PR in this repo (a merge commit's
+      // auto-generated "Merge pull request #1072" message will match its
+      // own PR number here too), which is exactly why it's kept as its own
+      // weaker relation type rather than folded into a stronger one.
+      IssueNumberMention.findAllMatchIn(c("fullMessage").str).map(_.group(1).toInt).distinct.foreach { number =>
+        val issueId = upsertIssue(conn, repoId, number, title = None, url = None, firstSeenInspectCommitsRunId = Some(inspectCommitsRunId))
+        upsertRelation(conn, "commit_message_references_issue", commitSha = Some(sha), pullRequestId = None, issueId = Some(issueId), evidence = Some(s"#$number"), inspectCommitsRunId)
       }
     }
   end storeEnriched
+
+  private val IssueNumberMention = """#(\d+)""".r
 
   // ---------------------------------------------------------------------
   // classified (from /classify_bugs)
@@ -431,14 +452,6 @@ object Store:
     )
     queryId(conn, "SELECT id FROM pull_requests WHERE repository_id = ? AND number = ?", Seq(repositoryId, number))
 
-  private def linkCommitPullRequest(conn: Connection, commitSha: String, pullRequestId: Long): Unit =
-    exec(
-      conn,
-      "INSERT INTO commit_pull_requests (commit_sha, pull_request_id) VALUES (?, ?) " +
-        "ON CONFLICT(commit_sha, pull_request_id) DO NOTHING",
-      Seq(commitSha, pullRequestId)
-    )
-
   private def upsertIssue(
       conn: Connection,
       repositoryId: Long,
@@ -458,12 +471,39 @@ object Store:
     )
     queryId(conn, "SELECT id FROM issues WHERE repository_id = ? AND number = ?", Seq(repositoryId, number))
 
-  private def linkIssueCommit(conn: Connection, issueId: Long, commitSha: String, viaPullRequestId: Option[Long]): Unit =
+  /** Upserts one typed edge between two of {commit, pull request, issue}
+    * into the generic `relations` table. Exactly two of `commitSha`,
+    * `pullRequestId`, `issueId` should be `Some`, the third `None`, which
+    * two is determined by `relationType` (see schema.sql's comment on the
+    * `relations` table for the full list of what each type means). The
+    * natural key (an expression index, since SQLite doesn't dedupe NULLs
+    * in a plain UNIQUE constraint) is `(relationType, commitSha,
+    * pullRequestId, issueId)`, so re-storing the same edge updates its
+    * `evidence` rather than duplicating the row.
+    */
+  private def upsertRelation(
+      conn: Connection,
+      relationType: String,
+      commitSha: Option[String],
+      pullRequestId: Option[Long],
+      issueId: Option[Long],
+      evidence: Option[String],
+      firstSeenInspectCommitsRunId: Long
+  ): Unit =
     exec(
       conn,
-      "INSERT INTO issue_commit_relations (issue_id, commit_sha, via_pull_request_id) VALUES (?, ?, ?) " +
-        "ON CONFLICT(issue_id, commit_sha) DO UPDATE SET via_pull_request_id = excluded.via_pull_request_id",
-      Seq(issueId, commitSha, viaPullRequestId.map(_.asInstanceOf[Any]).orNull)
+      "INSERT INTO relations (relation_type, commit_sha, pull_request_id, issue_id, evidence, first_seen_inspect_commits_run_id) " +
+        "VALUES (?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(relation_type, COALESCE(commit_sha, ''), COALESCE(pull_request_id, -1), COALESCE(issue_id, -1)) " +
+        "DO UPDATE SET evidence = excluded.evidence",
+      Seq(
+        relationType,
+        commitSha.orNull,
+        pullRequestId.map(_.asInstanceOf[Any]).orNull,
+        issueId.map(_.asInstanceOf[Any]).orNull,
+        evidence.orNull,
+        firstSeenInspectCommitsRunId
+      )
     )
 
   private def upsertBugClassification(

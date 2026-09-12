@@ -57,7 +57,7 @@ This is the tool behind the `inspect-commits` subcommand. Internally it:
 
 ### `src/main/resources/schema.sql`
 
-The SQLite schema for the repository catalog: repositories, repository snapshots, one run table per pipeline stage (`inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`), commits, commit parents, a `run_commits` join table, pull requests, issues, issue-commit relations, and bug classifications, plus three empty stub tables (`test_observations`, `materialized_revisions`, `build_runs`) reserved for capabilities that don't exist yet. Every table with a natural key (a repo's `owner`+`repo`, a run's `run_id`, a commit's `sha`) is meant to be upserted into, never plain-inserted.
+The SQLite schema for the repository catalog: repositories, repository snapshots, one run table per pipeline stage (`inspect_repo_runs`, `inspect_commits_runs`, `classify_bugs_runs`), commits, commit parents, a `run_commits` join table, pull requests, issues, a typed `relations` table (a `relation_type` column distinguishes, for example, a commit belonging to a PR from that PR closing an issue, rather than collapsing every commit/PR/issue connection into one generic fact, see "How a commit connects to a PR or an issue" below), and bug classifications, plus three empty stub tables (`test_observations`, `materialized_revisions`, `build_runs`) reserved for capabilities that don't exist yet. Every table with a natural key (a repo's `owner`+`repo`, a run's `run_id`, a commit's `sha`) is meant to be upserted into, never plain-inserted.
 
 ### `src/main/scala/causeway/mini/Store.scala`
 
@@ -272,16 +272,23 @@ Every command above, after writing its own JSON file, also stores that file's co
 
 Repeating a step (say, re-running `/inspect_repo` for the same repo and window) updates the existing rows rather than creating duplicates. Mining the same repo again with a *different* window creates a second, separate run, but both runs still share the one row for the repository itself, and a commit rediscovered by both runs is still just one row in `commits`, linked to both runs.
 
-For example, after running the full pipeline once, this finds every genuine bug fix found so far, across every classification run, with its linked issue:
+### How a commit connects to a PR or an issue
+
+A commit belonging to a PR, a PR closing an issue, and a commit's own message merely mentioning an issue number are three different claims with three different strengths of evidence, so they're kept as three distinctly-typed rows in one `relations` table (a `relation_type` column says which kind each row is), rather than collapsed into one generic "this commit relates to this issue" fact. That collapsing used to be a real bug here: attributing a PR's closing issue to every commit inside that PR overstated the connection for every commit in the PR except whichever one actually did the closing, since closing an issue is a fact about the PR as a whole, not about any one commit in it. Querying across relation types is just a `WHERE relation_type = '...'`, or no filter at all for "every relation touching this commit."
+
+For example, after running the full pipeline once, this finds every genuine bug fix found so far, across every classification run, joining through whichever PR actually closed the linked issue (not just any PR the commit happened to belong to):
 
 ```sql
 SELECT c.sha, c.short_message, i.title AS issue_title, bc.verdict_rationale
 FROM bug_classifications bc
 JOIN commits c ON c.sha = bc.commit_sha
-LEFT JOIN issue_commit_relations icr ON icr.commit_sha = c.sha
-LEFT JOIN issues i ON i.id = icr.issue_id
+LEFT JOIN relations belongs ON belongs.relation_type = 'commit_belongs_to_pr' AND belongs.commit_sha = c.sha
+LEFT JOIN relations closes ON closes.relation_type = 'pr_closes_issue' AND closes.pull_request_id = belongs.pull_request_id
+LEFT JOIN issues i ON i.id = closes.issue_id
 WHERE bc.verdict = 1;
 ```
+
+Currently populated relation types: `commit_belongs_to_pr`, `pr_closes_issue`, and `commit_message_references_issue` (a raw `#123`-shaped match in the commit's own message, unconfirmed by GitHub, kept separate from anything GitHub itself has resolved). A few more (`commit_mentions_issue`, `pr_references_issue`, `issue_mentions_commit_sha`) are designed for but not implemented yet, they need fetching data this pipeline doesn't fetch today (an issue's own timeline events and comment text, not just the commit → PR → issue chain).
 
 ## How it all fits together
 

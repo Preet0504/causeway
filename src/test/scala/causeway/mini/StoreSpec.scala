@@ -109,3 +109,104 @@ class StoreSpec extends FunSuite:
       )
     finally conn.close()
   }
+
+  private def enrichedJson(runId: String, commits: List[ujson.Value]): ujson.Value =
+    ujson.Obj(
+      "runId" -> runId,
+      "repoUrl" -> "https://github.com/acme/widgets",
+      "owner" -> "acme",
+      "repo" -> "widgets",
+      "enrichedCommitCount" -> commits.length,
+      "commits" -> commits
+    )
+
+  private def commitWithPr(sha: String, fullMessage: String, prNumber: Int, closingIssueNumbers: List[Int]): ujson.Value =
+    ujson.Obj(
+      "sha" -> sha,
+      "shortMessage" -> fullMessage,
+      "fullMessage" -> fullMessage,
+      "pullRequests" -> List(
+        ujson.Obj(
+          "number" -> prNumber,
+          "title" -> s"PR $prNumber",
+          "url" -> s"https://github.com/acme/widgets/pull/$prNumber",
+          "state" -> "MERGED",
+          "closingIssues" -> closingIssueNumbers.map { n =>
+            ujson.Obj("number" -> n, "title" -> s"Issue $n", "url" -> s"https://github.com/acme/widgets/issues/$n")
+          }
+        )
+      )
+    )
+
+  test("a PR's closing issue is attributed to the PR, not duplicated onto every commit inside it") {
+    val conn = openTempDb()
+    try
+      // Two commits both belong to PR 10; PR 10 closes issue 42. Only one
+      // of these two commits, in reality, is the one that actually did the
+      // closing, closing-an-issue is a fact about the PR as a whole, not
+      // about every commit that happens to be part of it.
+      val commitA = commitWithPr("shaA", "some work", prNumber = 10, closingIssueNumbers = List(42))
+      val commitB = commitWithPr("shaB", "more work", prNumber = 10, closingIssueNumbers = List(42))
+
+      Store.storeInto(conn, enrichedJson("run-A", List(commitA, commitB)), "run-A_enriched.json")
+
+      // Both commits really do belong to PR 10, that's a genuine per-commit
+      // fact, so two rows here is correct.
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_belongs_to_pr'"), 2)
+
+      // But PR 10 closing issue 42 must appear exactly once, as an edge
+      // between the PR and the issue, not once per commit in that PR. The
+      // old (buggy) behavior recorded this once per commit, i.e. 2 rows
+      // here instead of 1, wrongly implying both commits individually
+      // closed the issue.
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_closes_issue'"), 1)
+
+      // And that one row must carry no commit_sha at all, since it's not
+      // attributed to either commit specifically.
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_closes_issue' AND commit_sha IS NULL"), 1)
+    finally conn.close()
+  }
+
+  test("a raw #N mention in a commit's own message is recorded as its own distinct, weaker relation type") {
+    val conn = openTempDb()
+    try
+      val commit = ujson.Obj(
+        "sha" -> "shaC",
+        "shortMessage" -> "Fixes #99 by tightening validation",
+        "fullMessage" -> "Fixes #99 by tightening validation",
+        "pullRequests" -> List.empty[ujson.Value]
+      )
+
+      Store.storeInto(conn, enrichedJson("run-C", List(commit)), "run-C_enriched.json")
+
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_message_references_issue'"), 1)
+      assertEquals(
+        count(
+          conn,
+          "SELECT COUNT(*) FROM relations r " +
+            "JOIN issues i ON i.id = r.issue_id " +
+            "WHERE r.relation_type = 'commit_message_references_issue' AND r.commit_sha = 'shaC' AND i.number = 99"
+        ),
+        1
+      )
+      // It must not also be recorded as a pr_closes_issue, that's a
+      // different claim from a different source, this commit has no PR at
+      // all here.
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_closes_issue'"), 0)
+    finally conn.close()
+  }
+
+  test("storing the same enriched run twice does not duplicate relations") {
+    val conn = openTempDb()
+    try
+      val commit = commitWithPr("shaD", "Fixes #7", prNumber = 20, closingIssueNumbers = List(7))
+      val json = enrichedJson("run-D", List(commit))
+
+      Store.storeInto(conn, json, "run-D_enriched.json")
+      Store.storeInto(conn, json, "run-D_enriched.json")
+
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_belongs_to_pr'"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'pr_closes_issue'"), 1)
+      assertEquals(count(conn, "SELECT COUNT(*) FROM relations WHERE relation_type = 'commit_message_references_issue'"), 1)
+    finally conn.close()
+  }

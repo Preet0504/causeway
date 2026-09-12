@@ -103,12 +103,6 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   UNIQUE (repository_id, number)
 );
 
-CREATE TABLE IF NOT EXISTS commit_pull_requests (
-  commit_sha TEXT NOT NULL REFERENCES commits(sha),
-  pull_request_id INTEGER NOT NULL REFERENCES pull_requests(id),
-  PRIMARY KEY (commit_sha, pull_request_id)
-);
-
 CREATE TABLE IF NOT EXISTS issues (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   repository_id INTEGER NOT NULL REFERENCES repositories(id),
@@ -119,11 +113,49 @@ CREATE TABLE IF NOT EXISTS issues (
   UNIQUE (repository_id, number)
 );
 
-CREATE TABLE IF NOT EXISTS issue_commit_relations (
-  issue_id INTEGER NOT NULL REFERENCES issues(id),
-  commit_sha TEXT NOT NULL REFERENCES commits(sha),
-  via_pull_request_id INTEGER REFERENCES pull_requests(id),
-  PRIMARY KEY (issue_id, commit_sha)
+-- A typed edge between two of {commit, pull_request, issue}. Each relation
+-- kind means something genuinely different (a commit belonging to a PR is
+-- not the same claim as that PR closing an issue, which is not the same
+-- claim as the commit's own message merely mentioning an issue number), and
+-- collapsing them into one generic "this commit relates to this issue" fact
+-- was a real bug: attributing a PR's closing-issue to every commit inside
+-- that PR overstates the connection for every commit except whichever one
+-- actually did the closing. One table with a `relation_type` discriminator
+-- (rather than a table per type) is used because every kind here is the
+-- same shape, an edge with an optional evidence note, and future
+-- confidence-scoring needs "every relation touching this commit, of any
+-- type" to be one query, not a UNION across tables.
+--
+-- Exactly two of (commit_sha, pull_request_id, issue_id) are set per row;
+-- which two, and what the edge means, is determined by relation_type:
+--   commit_belongs_to_pr             (commit_sha, pull_request_id)
+--   pr_closes_issue                  (pull_request_id, issue_id)
+--   commit_message_references_issue  (commit_sha, issue_id) -- a raw #N-shaped
+--     match in the commit's own message, unconfirmed by GitHub, so it is
+--     kept distinct from the future GitHub-confirmed commit_mentions_issue.
+-- Future relation types (need per-issue timeline/comment data not fetched
+-- yet): commit_mentions_issue, pr_references_issue, issue_mentions_commit_sha.
+CREATE TABLE IF NOT EXISTS relations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  relation_type TEXT NOT NULL,
+  commit_sha TEXT REFERENCES commits(sha),
+  pull_request_id INTEGER REFERENCES pull_requests(id),
+  issue_id INTEGER REFERENCES issues(id),
+  evidence TEXT,
+  first_seen_inspect_commits_run_id INTEGER REFERENCES inspect_commits_runs(id)
+);
+
+-- SQLite treats every NULL as distinct for UNIQUE purposes, so a plain
+-- UNIQUE(relation_type, commit_sha, pull_request_id, issue_id) would not
+-- dedupe rows where the unused endpoint is NULL (e.g. two pr_closes_issue
+-- rows for the same PR/issue pair, both with commit_sha NULL, would not
+-- conflict). COALESCE-ing each endpoint to a non-NULL sentinel in an
+-- expression index makes the natural key actually enforce uniqueness.
+CREATE UNIQUE INDEX IF NOT EXISTS relations_natural_key ON relations (
+  relation_type,
+  COALESCE(commit_sha, ''),
+  COALESCE(pull_request_id, -1),
+  COALESCE(issue_id, -1)
 );
 
 CREATE TABLE IF NOT EXISTS bug_classifications (
