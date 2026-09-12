@@ -488,61 +488,63 @@ Real output (top 5):
 
 ```mermaid
 flowchart TD
-    DR0["/discover_repos (optional)<br/>describe what you're looking for"]
-    REPODISC(("repo-discovery<br/>agent"))
+    DR0["/discover_repos optional<br/>describe what you're looking for"]
+    REPODISC("repo-discovery agent")
     DR0 --> REPODISC
     DB[(workspace/causeway.db)]
-    GHSEARCH{{GitHub search API}}
+    GHSEARCH["GitHub search API"]
     REPODISC -- "structured search flags" --> GHSEARCH
     GHSEARCH -- "candidate repos" --> REPODISC
     REPODISC -. "store immediately" .-> DB
-    QUALIFY["qualify-repos (no agent, fixed check)<br/>issues enabled? closed issues/merged PRs? looks like tests?"]
+    QUALIFY["qualify-repos, no agent, fixed check<br/>issues enabled, closed issues or merged PRs, looks like tests"]
     REPODISC -- "search results" --> QUALIFY
-    QUALIFY -- "metadata + tree, no cloning" --> GH0{{GitHub}}
+    GH0["GitHub"]
+    QUALIFY -- "metadata and tree, no cloning" --> GH0
     QUALIFY -. "store qualification" .-> DB
     QUALIFY -- "pick a qualifying one" --> IR0
 
-    LISTQ["/list_qualifying_repos (optional)<br/>list-qualifying-repos: pure DB read, every past search"]
+    LISTQ["/list_qualifying_repos optional<br/>pure DB read, every past search"]
     DB -. "every qualifying repo ever found" .-> LISTQ
     LISTQ -- "pick one" --> IR0
 
-    IR0["Stage 1: /inspect_repo<br/>ask repo URL + window,<br/>clone/open it, list its remotes, ask which to use"]
+    IR0["Stage 1: /inspect_repo<br/>ask repo URL and window,<br/>clone or open it, list its remotes, ask which to use"]
     IR1["fetch from chosen remote,<br/>list its branches via GitHub,<br/>ask which branch to mine"]
     IR0 --> IR1
     IR["list commits in the window<br/>from the chosen branch,<br/>ask for a scan commit limit"]
     IR1 --> IR
 
-    EV[["evidence file (JSON)<br/>commit list, plus remote/branch/SHA chosen,<br/>plus scan commit limit"]]
+    EV["evidence file: commit list,<br/>plus remote, branch, SHA chosen,<br/>plus scan commit limit"]
     IR --> EV
     EV -. "store" .-> DB
 
-    IC["Stage 2: /inspect_commits<br/>fetch PR/issue context, compute code diffs"]
+    IC["Stage 2: /inspect_commits<br/>fetch PR and issue context, compute code diffs"]
     EV --> IC
-    IC -- "batched requests" --> GH2{{GitHub}}
+    GH2["GitHub"]
+    IC -- "batched requests" --> GH2
     GH2 -- "PR and issue details" --> IC
 
-    EN[["enriched file (JSON)<br/>+ linked PRs/issues, + code diffs"]]
+    EN["enriched file: evidence file plus<br/>linked PRs and issues, plus code diffs"]
     IC --> EN
     EN -. "store" .-> DB
 
-    CB["Stage 3: /classify_bugs<br/>ask: how many bug fixes to find? (bug target)"]
+    CB["Stage 3: /classify_bugs<br/>ask how many bug fixes to find, the bug target"]
     EN --> CB
 
-    NEXTBATCH["take the next group of 5 commits<br/>(newest first)"]
+    NEXTBATCH["take the next group of 5 commits,<br/>newest first"]
     CB --> NEXTBATCH
-    REV(("bug-classifier<br/>reviewer"))
+    REV("bug-classifier reviewer")
     NEXTBATCH --> REV
-    JUDGE["orchestrator judges each commit<br/>in this group: bug fix, or not, with reasons"]
+    JUDGE["orchestrator judges each commit<br/>in this group: bug fix or not, with reasons"]
     REV --> JUDGE
-    CHECK{"reached the bug target yet,<br/>or out of groups?"}
+    CHECK{"reached the bug target yet,<br/>or out of groups"}
     JUDGE --> CHECK
     CHECK -- "no, groups remain" --> NEXTBATCH
     CHECK -- "yes" --> RESULT
 
-    RESULT[["final file + table for you:<br/>every commit examined, its scores, its verdict"]]
+    RESULT["final file and table:<br/>every commit examined, its scores, its verdict"]
     RESULT -. "store" .-> DB
 
-    RC{{"/run_causeway runs Stage 1 through Stage 3<br/>in one command, same questions, no stopping"}}
+    RC["/run_causeway runs Stage 1 through Stage 3<br/>in one command, same questions, no stopping"]
     RC -. "one command, whole chain" .-> IR0
 ```
 
