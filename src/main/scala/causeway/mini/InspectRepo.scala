@@ -238,6 +238,10 @@ object InspectRepo:
       println(s"WINDOW_COMMIT_COUNT=${windowCommits.size}")
       println(s"EVIDENCE_FILE=${outFile.getPath}")
       println(s"RUN_ID=$runId")
+
+      Store.storeIntoDatabase(evidence, outFile.getPath) match
+        case Right(_)  => println(s"DATABASE=workspace/causeway.db")
+        case Left(err) => System.err.println(s"WARN: could not store the evidence file in the database: $err")
   end runInspect
 
   private def openOrClone(repoUrl: String, workspaceDir: File): Git =

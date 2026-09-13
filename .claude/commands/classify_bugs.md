@@ -8,7 +8,13 @@ Run the Causeway Mini bug-classification flow. This reads an `/inspect_commits` 
 
 If this conversation already knows the enriched evidence file path from an `/inspect_commits` run earlier in this session, use it directly.
 
-Otherwise, list `workspace/exports/*_enriched.json`. If there's more than one, use the AskUserQuestion tool, header `"Evidence file"`, one option per file (up to 4, most recent first if there are more, the tool's custom-answer option still lets the person name an older one directly) to ask which to use. If there's exactly one, just use it.
+Otherwise, run:
+
+```bash
+tools/causeway list-runs --stage inspect-commits --limit 4
+```
+
+This is a pure database read, no network call, no writes, don't run any SQL of your own here. Read each `RUN run_id=... owner=... repo=... window=... since=... createdAt=... sourceFile=...` line. If `SHOWN=1`, just use that one's `sourceFile`. If more than one, use the AskUserQuestion tool, header `"Evidence file"`, one option per run labeled `owner/repo (window)` (not the bare filename, that tells you nothing), most recent first, to ask which to use, the tool's custom-answer option still lets the person name a `sourceFile` path directly. If `SHOWN=0`, tell the user plainly that no `/inspect_commits` run has been recorded yet and to run that first.
 
 ## 2. Ask for the bug target
 

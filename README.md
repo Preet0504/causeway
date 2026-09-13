@@ -50,6 +50,7 @@ Everything runs through a handful of chat commands, typed one after another in C
 - **`src/main/scala/causeway/mini/Causeway.scala`**: the one compiled entry point. Dispatches on its first argument to that capability's own `run`:
   - `search-repos`, `qualify-repos`, `list-qualifying-repos`, `repo-details` — repository discovery and lookup
   - `inspect-repo`, `inspect-commits` — the mining stages
+  - `list-runs` — look up a recent run's JSON file by repository and window, instead of guessing from a bare filename
   - `store` — writes a JSON file's contents into the SQLite catalog
 - **`tools/causeway`**: the launcher script every chat command calls, e.g. `tools/causeway inspect-repo --mode list-remotes ...`.
   - Runs already-compiled classes directly.
@@ -82,9 +83,9 @@ Everything runs through a handful of chat commands, typed one after another in C
   | `list-remotes` | a repo URL | Clones the repo with JGit (or opens an existing local copy), then prints every remote configured there, name and URL. A bad repo URL is caught right here — cloning simply fails. |
   | `list-branches` | a chosen remote | Fetches from that remote and asks GitHub's REST API for every branch, each with its current commit SHA, flagging whichever one GitHub calls the default. |
   | `count` | a chosen remote, branch, and its exact SHA | Walks every commit reachable from that pinned commit, checking each one's timestamp individually, and prints how many fall in the window. Writes nothing. |
-  | `write` | same as `count`, plus a scan commit limit | Writes every commit in the window (sha, short/full message, commit date, parent shas), plus the chosen remote/branch/SHA, to a JSON evidence file. |
+  | `write` | same as `count`, plus a scan commit limit | Writes every commit in the window (sha, short/full message, commit date, parent shas), plus the chosen remote/branch/SHA, to a JSON evidence file, then stores that same data straight into `workspace/causeway.db` itself. |
 
-  `count` and `write` trust the given `--branch-sha` outright, they don't re-fetch or re-resolve it.
+  `count` and `write` trust the given `--branch-sha` outright, they don't re-fetch or re-resolve it. `write` self-storing means there's no separate `store` invocation needed for this stage, the same way `search-repos`/`qualify-repos` write straight to the database themselves.
 
 - **`src/main/scala/causeway/mini/EnrichCommits.scala`** (`inspect-commits` subcommand):
   1. Reads the evidence file `InspectRepo` produced.
@@ -92,7 +93,9 @@ Everything runs through a handful of chat commands, typed one after another in C
   3. Asks GitHub's GraphQL API for the pull requests linked to those commits (and each PR's own commit list and closed issues), batching up to 20 commits per request.
   4. For every issue discovered that way, asks a second batched query for that issue's own timeline and body text.
   5. For every non-merge commit, computes the before/after code diff using JGit. Merge commits are skipped, they have no single "before and after" to diff against.
-  6. Writes a new JSON file with all of this added, leaving the original untouched.
+  6. Writes a new JSON file with all of this added, leaving the original untouched, then stores it straight into `workspace/causeway.db` itself, same as `InspectRepo` above.
+
+- **`src/main/scala/causeway/mini/ListRuns.scala`** (`list-runs` subcommand): a pure database read, no network call, no writes. Every evidence/enriched/classified file lives in one flat `workspace/exports/` folder named only `run_<uuid>...json`, nothing in the filename says which repo or window it's for. `list-runs --stage inspect-repo` or `--stage inspect-commits` lists the most recent runs of that stage, each with its owner/repo, window, and exact `source_file` path (already recorded on every run table), so `/inspect_commits` and `/classify_bugs` can offer a real choice instead of a list of opaque filenames.
 
 - **`.claude/agents/bug-classifier.md`**: each AI reviewer's instructions. Score a commit's message, its code diff, and its linked pull requests/issues, each from 0.0 to 1.0 with a short explanation, in a fixed reply format so results can be read back automatically.
 
@@ -100,7 +103,7 @@ Everything runs through a handful of chat commands, typed one after another in C
 
 - **`src/main/resources/schema.sql`**: the SQLite schema behind `workspace/causeway.db`. Every table falls into one of three kinds — run tables, catalog tables, and join tables — described in full, table by table, in "What's in each table" under "The SQLite catalog" further down.
 
-- **`src/main/scala/causeway/mini/Store.scala`** (`store` subcommand): takes any JSON file one of the three pipeline stages produced, detects which of the three it is by which fields are present, and upserts its contents into `workspace/causeway.db`. Storing the same file twice, or storing two different runs against the same repository, updates or reuses existing rows rather than duplicating.
+- **`src/main/scala/causeway/mini/Store.scala`**: the shared upsert logic every other tool calls into. Given any JSON file one of the three pipeline stages produced, it detects which of the three it is by which fields are present and upserts its contents into `workspace/causeway.db`. Storing the same file twice, or storing two different runs against the same repository, updates or reuses existing rows rather than duplicating. `InspectRepo` and `EnrichCommits` call this directly, in-process, right after writing their own JSON file. `store`, the CLI subcommand built on top of it, is what `/classify_bugs` uses instead, since classification happens in the chat layer with no compiled Scala tool of its own to call into, and it's also there for manually re-storing any evidence/enriched/classified file by hand if ever needed.
 
 ### Chat commands and agents
 
@@ -108,8 +111,8 @@ Everything runs through a handful of chat commands, typed one after another in C
 - **`.claude/commands/discover_repos.md`**: asks what kind of repository the user is looking for and how many candidates they want, hands that to the `repo-discovery` agent, then runs `qualify-repos` directly on whatever was found before showing anything, and offers to remember a chosen repo's URL for `/inspect_repo` or `/run_causeway`.
 - **`.claude/commands/list_qualifying_repos.md`**: asks how many repositories to show, runs `list-qualifying-repos` directly, shows the results, and offers to remember a chosen repo's URL the same way `/discover_repos` does.
 - **`.claude/commands/inspect_repo.md`**: gathers the repo URL and time window (reusing either one already known from earlier in the session), lists the repo's configured remotes and lets the user choose one, lists that remote's branches via GitHub and lets the user choose one, resolves the window to a date, previews the commit count, asks for a scan commit limit, writes the evidence file, and stores it.
-- **`.claude/commands/inspect_commits.md`**: finds the evidence file from the previous step, runs the enrichment tool, stores the resulting file, and shows a few example results.
-- **`.claude/commands/classify_bugs.md`**: finds the enriched file, asks how many genuine bug fixes to find (the bug target), works through the commits in groups of 5, newest first, sending each group to its own AI reviewer and judging the results as they come back, stopping once the target is reached. Shows a table, writes the final file, and stores it.
+- **`.claude/commands/inspect_commits.md`**: finds the evidence file (already known from earlier in the session, or looked up via `list-runs` and picked by owner/repo/window if not), runs the enrichment tool, and shows a few example results.
+- **`.claude/commands/classify_bugs.md`**: finds the enriched file (same `list-runs` lookup as above if not already known), asks how many genuine bug fixes to find (the bug target), works through the commits in groups of 5, newest first, sending each group to its own AI reviewer and judging the results as they come back, stopping once the target is reached. Shows a table, writes the final file, and stores it.
 - **`.claude/commands/run_causeway.md`**: runs `/inspect_repo`, `/inspect_commits`, and `/classify_bugs`'s exact steps in sequence, one command, no stopping in between to report each stage's own result separately.
 
 ## The commands, in order
@@ -245,9 +248,10 @@ $ tools/causeway inspect-repo ... --mode write --scan-commit-limit 6
 WINDOW_COMMIT_COUNT=28
 EVIDENCE_FILE=workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
 RUN_ID=7e502434-a815-4663-a2fe-c5e775da3f87
+DATABASE=workspace/causeway.db
 ```
 
-The evidence file's `repoSnapshot` records exactly what was mined (which remote, branch, and commit, pinned so the run can never silently drift onto a different state later):
+`write` stores the evidence straight into the catalog itself right after writing the file, no separate step needed. The evidence file's `repoSnapshot` records exactly what was mined (which remote, branch, and commit, pinned so the run can never silently drift onto a different state later):
 
 ```json
 {
@@ -291,9 +295,10 @@ ENRICHED_FILE=workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87_enriche
 SAMPLE sha=4f859fdf3b prCount=1 diffFileCount=0 isMergeCommit=true
 SAMPLE sha=3dd0ec02f2 prCount=1 diffFileCount=3 isMergeCommit=false
 SAMPLE sha=6c14048079 prCount=1 diffFileCount=0 isMergeCommit=true
+DATABASE=workspace/causeway.db
 ```
 
-The same commit as before, now with `pullRequests` and `diff` added (diff shortened here, the real one carries the full patch text):
+Same as `/inspect_repo`, this stores itself into the catalog right after writing the enriched file. The same commit as before, now with `pullRequests` and `diff` added (diff shortened here, the real one carries the full patch text):
 
 ```json
 {

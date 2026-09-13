@@ -81,28 +81,19 @@ Build 3 preset options scaled to `WINDOW_COMMIT_COUNT`, not a fixed list that mi
 tools/causeway inspect-repo --repo-url <repo-url> --mode write --remote-name <chosen-remote> --branch-name <chosen-branch> --branch-sha <chosen-branch-sha> --since-date <iso-date> --window-label <slug> --scan-commit-limit <limit>
 ```
 
-This does not fetch again, it trusts the exact commit already chosen in step 3. It writes every commit within the window (sha, short/full message, commit date, parent shas), plus the chosen remote, branch, SHA, and the scan commit limit, to a JSON evidence file under `workspace/exports/`.
+This does not fetch again, it trusts the exact commit already chosen in step 3. It writes every commit within the window (sha, short/full message, commit date, parent shas), plus the chosen remote, branch, SHA, and the scan commit limit, to a JSON evidence file under `workspace/exports/`, then stores that same data into `workspace/causeway.db` itself, no separate step needed. Running this again, for the same repo and window, updates existing rows rather than duplicating them.
 
 Read the tool's stdout for:
 - `WINDOW_COMMIT_COUNT`, should match step 5's preview
 - `EVIDENCE_FILE`, path to the JSON evidence file
 - `RUN_ID`, the run's identifier
+- `DATABASE`, printed once the catalog write succeeds. If it's missing and a `WARN: could not store the evidence file in the database` line appears on stderr instead, mention that plainly but don't treat it as blocking, the evidence file itself is still valid and `/inspect_commits` only reads that.
 
 If the command fails, or doesn't print an `EVIDENCE_FILE` line, report the failure plainly to the user, don't claim success.
 
 `tools/causeway` rebuilds automatically the first time it's run after a source change (you'll see "source changed, rebuilding ..." on stderr), every other invocation runs the already-compiled code directly with no sbt involved. If something still behaves unexpectedly right after a code change, delete `target/causeway-classpath.txt` to force a fresh rebuild on the next call.
 
-## 8. Store the evidence in the SQLite catalog
-
-```bash
-tools/causeway store --file <evidence-file>
-```
-
-This upserts the repository, its snapshot, this run, and every window commit into `workspace/causeway.db`, alongside the JSON file (the catalog is additive, it doesn't replace the JSON files later commands read). Running this or any earlier step again, for the same repo and window, updates existing rows rather than duplicating them.
-
-If this fails, report it plainly but don't treat it as blocking, the evidence file itself is still valid and `/inspect_commits` only reads that.
-
-## 9. Final report
+## 8. Final report
 
 Produce one final message stating, plainly:
 - The repo (`owner/repo`)

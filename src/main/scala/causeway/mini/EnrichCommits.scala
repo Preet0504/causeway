@@ -26,7 +26,11 @@ import scala.jdk.CollectionConverters.*
   * second batched query), the source for `commit_mentions_issue` and
   * `pr_mentions_issue` (see `Store.storeEnriched`, which turns all of this
   * into typed relations, not this file — this file only fetches). Writes a
-  * new "_enriched" evidence file; the original is left untouched.
+  * new "_enriched" evidence file, then stores it straight into
+  * `workspace/causeway.db` via `Store.storeIntoDatabase`, the same way
+  * `SearchRepos`/`QualifyRepos` write straight to the database themselves
+  * rather than requiring a separate `store` invocation. The original
+  * evidence file is left untouched.
   */
 object EnrichCommits:
 
@@ -132,6 +136,10 @@ object EnrichCommits:
       val isMerge = c("diff")("isMergeCommit").bool
       println(s"SAMPLE sha=$sha prCount=$prCount diffFileCount=$fileCount isMergeCommit=$isMerge")
     }
+
+    Store.storeIntoDatabase(enrichedEvidence, outFile.getPath) match
+      case Right(_)  => println(s"DATABASE=workspace/causeway.db")
+      case Left(err) => System.err.println(s"WARN: could not store the enriched file in the database: $err")
 
     // Both our own thread pool and the JDK HttpClient can leave non-daemon
     // threads idling after main() returns, which would keep the JVM (and any

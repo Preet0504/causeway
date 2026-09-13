@@ -30,6 +30,7 @@ object Causeway:
       case "repo-details"          => RepoDetails.run(rest)
       case "inspect-repo"          => InspectRepo.run(rest)
       case "inspect-commits"       => EnrichCommits.run(rest)
+      case "list-runs"             => ListRuns.run(rest)
       case "store"                 => Store.run(rest)
       case "-h" | "--help"         => println(usage)
       case other                   => fail(s"Unknown subcommand '$other'.\n\n$usage")
@@ -50,6 +51,8 @@ object Causeway:
       |  inspect-repo          Discover a repo's remotes/branches and extract a commit window as evidence.
       |                        Modes: --mode list-remotes | list-branches | count | write
       |  inspect-commits       Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
+      |  list-runs             List recent inspect-repo/inspect-commits runs (--stage), each tagged with
+      |                        its repository, window, and exact JSON file, for picking a file to reuse.
       |  store                 Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
       |""".stripMargin
 

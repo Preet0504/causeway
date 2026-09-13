@@ -48,6 +48,32 @@ object Store:
     finally conn.close()
   end run
 
+  /** Opens `workspace/causeway.db` (creating it if needed) and stores one
+    * JSON file's contents into it, the same upsert logic the `store`
+    * subcommand uses. Called directly by `InspectRepo` and `EnrichCommits`
+    * right after each writes its own JSON file, the same way `SearchRepos`/
+    * `QualifyRepos` write straight to the database with no intermediate
+    * file, so `store`'s generic file-detection is only actually needed for
+    * `/classify_bugs` (the one stage with no compiled Scala tool of its own
+    * to call into). Failures are reported, not thrown: the JSON file is
+    * the primary artifact and was already written successfully, a database
+    * hiccup here shouldn't fail the command that produced it.
+    */
+  private[mini] def storeIntoDatabase(json: ujson.Value, filePath: String): Either[String, String] =
+    Class.forName("org.sqlite.JDBC")
+    new File(DbPath).getAbsoluteFile.getParentFile.mkdirs()
+    val conn = DriverManager.getConnection(s"jdbc:sqlite:$DbPath")
+    try
+      conn.setAutoCommit(false)
+      val kind = storeInto(conn, json, filePath)
+      conn.commit()
+      Right(kind)
+    catch
+      case e: Exception =>
+        conn.rollback()
+        Left(e.getMessage)
+    finally conn.close()
+
   /** Applies the schema (idempotent, `CREATE TABLE IF NOT EXISTS`) and
     * upserts one JSON file's data into an already-open connection, without
     * touching commit/rollback or the fixed `workspace/causeway.db` path, so

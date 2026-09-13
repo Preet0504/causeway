@@ -7,11 +7,11 @@ Run the full Causeway Mini pipeline end to end, in one continuous flow: pick a r
 
 ## 1. Inspect the repo
 
-Follow `/inspect_repo`'s flow in full, its steps 1 through 8: gather the repo URL and window, discover and choose the remote, discover and choose the branch, resolve the window to a date, preview the commit count, ask for the scan commit limit, write the evidence file, and store it. Skip its own step 9 (final report) and closing line, fold everything it would have reported into this command's own final report (step 4 below) instead.
+Follow `/inspect_repo`'s flow in full, its steps 1 through 7: gather the repo URL and window, discover and choose the remote, discover and choose the branch, resolve the window to a date, preview the commit count, ask for the scan commit limit, and write the evidence file (which stores itself into the catalog automatically). Skip its own step 8 (final report) and closing line, fold everything it would have reported into this command's own final report (step 4 below) instead.
 
 ## 2. Enrich the commits
 
-Follow `/inspect_commits`'s flow, its steps 2 through 3: run the enrichment tool, then store the result. Its step 1 doesn't apply, you already know the evidence file path from step 1 above. Skip its own step 4 (final report) the same way.
+Follow `/inspect_commits`'s flow, its step 2: run the enrichment tool (which stores the result into the catalog automatically). Its step 1 doesn't apply, you already know the evidence file path from step 1 above. Skip its own step 3 (final report) the same way.
 
 ## 3. Classify bug fixes
 
