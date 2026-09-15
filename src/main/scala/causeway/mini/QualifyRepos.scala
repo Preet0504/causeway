@@ -115,6 +115,8 @@ object QualifyRepos:
         if result.qualifies then qualifiedCount += 1 else rejectedCount += 1
         println(
           s"QUALIFY owner=$owner repo=$repo qualifies=${result.qualifies} " +
+            s"stars=${result.currentStars.getOrElse("?")} language=${result.currentLanguage.getOrElse("?")} " +
+            s"sizeKb=${result.currentSizeKb.getOrElse("?")} " +
             s"closedIssues=${result.closedIssueCount} openIssues=${result.openIssueCount} " +
             s"mergedPrs=${result.mergedPrCount} openPrs=${result.openPrCount} testFiles=${result.testFileCount}" +
             result.rejectionReason.map(r => s" reason=\"$r\"").getOrElse("")

@@ -49,6 +49,10 @@ If the tool fails or prints an `ERROR:` line, report that plainly, don't guess a
 
 ## Reporting back
 
-Summarize plainly: how many repositories were found (against the max you asked for), the flags you actually used (so a person can tell you translated their requirements correctly), and a short list of the results (owner/repo, stars, language is usually enough, you don't need to repeat every field). If the result count is suspiciously small (0, or far fewer than the max), say so and suggest which filter is most likely too narrow, rather than silently reporting a thin result set as if it were expected.
+Whatever invoked you already has (or will separately fetch) the actual repository data itself, it does not need you to relay `REPO` lines or result details back to it. Report back exactly this, nothing more:
+- `SEARCH_RUN_ID` — required, this is the only handle the orchestrator has to do anything further with what you found.
+- The exact flags you used, e.g. `language:Java stars:>=1000`, so a person can tell whether their requirements were translated the way they expected.
+- `RESULT_COUNT` — how many repositories were found, against the max you were asked for. If it's suspiciously small (0, or far fewer than the max), say so and suggest which flag is most likely too narrow.
+- Whether the run succeeded, failed, or needed clarification you didn't have.
 
 You do not clone any of these repositories, inspect their commits, or do anything else with them, that's `/inspect_repo`'s job, once a person has picked one from your results.

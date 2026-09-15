@@ -70,7 +70,7 @@ Everything runs through a handful of chat commands, typed one after another in C
   - How many files in its tree look like tests (a recursive listing of paths only, no file content, pattern-matched against common test-file conventions).
   - **Rejects outright** if issues are disabled, or if there are zero closed issues and zero merged PRs. Every other count is recorded but never causes a rejection by itself.
   - Fully mechanical (fixed thresholds), so it's invoked directly rather than through an agent.
-  - The same metadata call also captures identity facts (`description`, `repo_created_at`, `forks_count`, `topics`, `default_branch`) and a current-state snapshot (`current_stars`, `current_language`, `current_size_kb`, `current_archived`, `current_fork`, `current_license`), both written into `repositories` through the same shared upsert `search-repos` uses.
+  - The same metadata call also captures identity facts (`description`, `repo_created_at`, `forks_count`, `topics`, `default_branch`) and a current-state snapshot (`current_stars`, `current_language`, `current_size_kb`, `current_archived`, `current_fork`, `current_license`), both written into `repositories` through the same shared upsert `search-repos` uses, and printed on the `QUALIFY` line itself (`stars`/`language`/`sizeKb`), so `/discover_repos` can build its results table entirely from this one command's own output, without needing to parse anything out of the `repo-discovery` agent's report.
 - **`src/main/scala/causeway/mini/ListQualifyingRepos.scala`** (`list-qualifying-repos` subcommand): a pure database read, no network call. Lists every repository that currently qualifies, most-starred first, up to a given `--limit`, with its issue/PR/test-file counts and whether it's already been mined. Deliberately lean output — `RepoDetails` below is the fuller picture for one chosen repo.
 - **`src/main/scala/causeway/mini/RepoDetails.scala`** (`repo-details` subcommand): another pure database read, for one repository at a time — its description, topics, license, creation date, and current archived/fork status. Shown once someone actually picks a repository to mine, not for every candidate in a results table.
 
@@ -107,7 +107,7 @@ Everything runs through a handful of chat commands, typed one after another in C
 
 ### Chat commands and agents
 
-- **`.claude/agents/repo-discovery.md`**: the repository discovery agent's instructions. Has access to exactly one tool, Bash, used for exactly one purpose: running `tools/causeway search-repos ...`. Its job is translation — turning a plain-language description into the tool's structured flags, asking rather than guessing at a number when a threshold isn't given.
+- **`.claude/agents/repo-discovery.md`**: the repository discovery agent's instructions. Has access to exactly one tool, Bash, used for exactly one purpose: running `tools/causeway search-repos ...`. Its job is translation — turning a plain-language description into the tool's structured flags, asking rather than guessing at a number when a threshold isn't given. Reports back only a fixed, minimal set (the search run id, the flags it used, the result count, success/failure), not the results themselves — `/discover_repos` gets those from `qualify-repos` directly, so the orchestrator never needs to parse repository data out of the agent's own prose.
 - **`.claude/commands/discover_repos.md`**: asks what kind of repository the user is looking for and how many candidates they want, hands that to the `repo-discovery` agent, then runs `qualify-repos` directly on whatever was found before showing anything, and offers to remember a chosen repo's URL for `/inspect_repo` or `/run_causeway`.
 - **`.claude/commands/list_qualifying_repos.md`**: asks how many repositories to show, runs `list-qualifying-repos` directly, shows the results, and offers to remember a chosen repo's URL the same way `/discover_repos` does.
 - **`.claude/commands/inspect_repo.md`**: gathers the repo URL and time window (reusing either one already known from earlier in the session), lists the repo's configured remotes and lets the user choose one, lists that remote's branches via GitHub and lets the user choose one, resolves the window to a date, previews the commit count, asks for a scan commit limit, writes the evidence file, and stores it.
@@ -132,25 +132,27 @@ Real output, searching for small-to-mid JSON libraries in Java:
 
 ```
 $ tools/causeway search-repos --language Java --topics json --min-stars 1000 --max-results 5
-REPO owner=chinabugotech repo=hutool stars=30273 language=Java sizeKb=75368 url=https://github.com/chinabugotech/hutool
-REPO owner=opendataloader-project repo=opendataloader-pdf stars=29103 language=Java sizeKb=87739 url=https://github.com/opendataloader-project/opendataloader-pdf
-REPO owner=alibaba repo=fastjson stars=25594 language=Java sizeKb=15533 url=https://github.com/alibaba/fastjson
-REPO owner=redisson repo=redisson stars=24392 language=Java sizeKb=36918 url=https://github.com/redisson/redisson
-REPO owner=apple repo=pkl stars=11518 language=Java sizeKb=9159 url=https://github.com/apple/pkl
-SEARCH_RUN_ID=0ff90ebd-11f0-4bdc-9a3a-92a465f246b5
+REPO owner=chinabugotech repo=hutool stars=30269 language=Java sizeKb=75368 url=https://github.com/chinabugotech/hutool
+REPO owner=opendataloader-project repo=opendataloader-pdf stars=29231 language=Java sizeKb=87741 url=https://github.com/opendataloader-project/opendataloader-pdf
+REPO owner=alibaba repo=fastjson stars=25589 language=Java sizeKb=15533 url=https://github.com/alibaba/fastjson
+REPO owner=redisson repo=redisson stars=24394 language=Java sizeKb=36916 url=https://github.com/redisson/redisson
+REPO owner=apple repo=pkl stars=11523 language=Java sizeKb=9164 url=https://github.com/apple/pkl
+SEARCH_RUN_ID=2af0c9fd-ce16-4877-9211-d19586a25996
 RESULT_COUNT=5
 ```
 
 ```
-$ tools/causeway qualify-repos --search-run-id 0ff90ebd-11f0-4bdc-9a3a-92a465f246b5
-QUALIFY owner=chinabugotech repo=hutool qualifies=true closedIssues=3118 openIssues=2 mergedPrs=540 openPrs=0 testFiles=1038
-QUALIFY owner=opendataloader-project repo=opendataloader-pdf qualifies=true closedIssues=126 openIssues=66 mergedPrs=394 openPrs=27 testFiles=110
-QUALIFY owner=alibaba repo=fastjson qualifies=true closedIssues=1693 openIssues=1935 mergedPrs=418 openPrs=177 testFiles=3305
-QUALIFY owner=redisson repo=redisson qualifies=true closedIssues=5688 openIssues=184 mergedPrs=792 openPrs=65 testFiles=1085
-QUALIFY owner=apple repo=pkl qualifies=true closedIssues=267 openIssues=176 mergedPrs=886 openPrs=49 testFiles=5335
+$ tools/causeway qualify-repos --search-run-id 2af0c9fd-ce16-4877-9211-d19586a25996
+QUALIFY owner=chinabugotech repo=hutool qualifies=true stars=30269 language=Java sizeKb=75368 closedIssues=3118 openIssues=2 mergedPrs=540 openPrs=0 testFiles=1038
+QUALIFY owner=opendataloader-project repo=opendataloader-pdf qualifies=true stars=29231 language=Java sizeKb=87741 closedIssues=126 openIssues=66 mergedPrs=396 openPrs=27 testFiles=110
+QUALIFY owner=alibaba repo=fastjson qualifies=true stars=25589 language=Java sizeKb=15533 closedIssues=1693 openIssues=1935 mergedPrs=418 openPrs=177 testFiles=3305
+QUALIFY owner=redisson repo=redisson qualifies=true stars=24394 language=Java sizeKb=36916 closedIssues=5688 openIssues=184 mergedPrs=792 openPrs=64 testFiles=1085
+QUALIFY owner=apple repo=pkl qualifies=true stars=11523 language=Java sizeKb=9164 closedIssues=267 openIssues=176 mergedPrs=887 openPrs=48 testFiles=5335
 QUALIFIED_COUNT=5
 REJECTED_COUNT=0
 ```
+
+`qualify-repos`'s own `QUALIFY` line now carries `stars`/`language`/`sizeKb` directly (it already fetches this data for the catalog, it just wasn't printed before), so the table below is built entirely from this one command's output, nothing needs to be parsed out of the agent's own report.
 
 All 5 qualified this time (real GitHub data, not always the case: `qualifies=false` shows up with a `reason=...` for anything with issues disabled or no closed issue/merged PR history).
 
