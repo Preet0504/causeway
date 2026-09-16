@@ -26,5 +26,6 @@ Produce one combined final message covering the whole run:
 - How many commits were enriched
 - The bug-classification table from step 3, and how many genuine bug fixes were found against the target
 - Where the evidence, enriched, and classified JSON files were written
+- The run id (the one `/inspect_repo` minted and every stage carried forward), stated plainly as its own line, e.g. "Run ID: `<id>`, save this if you want to come back to this exact run later via `tools/causeway list-runs --run-id <id>`"
 
 End the message with: "If anything above is wrong, just run /run_causeway again to start over."

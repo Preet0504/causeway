@@ -21,6 +21,7 @@ Everything runs through a handful of chat commands, typed one after another in C
 |---|---|---|---|
 | Discover (optional) | `/discover_repos` | a plain-language description of what you're looking for | candidate repositories, stored in the catalog |
 | Revisit (optional) | `/list_qualifying_repos` | nothing (or how many to show) | every candidate ever found, from any past search |
+| Revisit (optional) | `/list_runs` | nothing (or how many to show) | past mining passes, newest first, with how far each one got |
 | Inspect | `/inspect_repo` | a repo URL and a time window | an **evidence file**: the commits in that window |
 | Enrich | `/inspect_commits` | the evidence file | an **enriched file**: + linked PRs/issues, + code diffs |
 | Classify | `/classify_bugs` | the enriched file and a bug target | a **classified file**: a verdict + rationale per commit |
@@ -50,7 +51,7 @@ Everything runs through a handful of chat commands, typed one after another in C
 - **`src/main/scala/causeway/mini/Causeway.scala`**: the one compiled entry point. Dispatches on its first argument to that capability's own `run`:
   - `search-repos`, `qualify-repos`, `list-qualifying-repos`, `repo-details` — repository discovery and lookup
   - `inspect-repo`, `inspect-commits` — the mining stages
-  - `list-runs` — look up a recent run's JSON file by repository and window, instead of guessing from a bare filename
+  - `list-runs` — browse past mining passes by date (like `git log`), list recent runs of one stage, or look up one exact run by its id, instead of guessing from a bare filename
   - `store` — writes a JSON file's contents into the SQLite catalog
 - **`tools/causeway`**: the launcher script every chat command calls, e.g. `tools/causeway inspect-repo --mode list-remotes ...`.
   - Runs already-compiled classes directly.
@@ -95,7 +96,10 @@ Everything runs through a handful of chat commands, typed one after another in C
   5. For every non-merge commit, computes the before/after code diff using JGit. Merge commits are skipped, they have no single "before and after" to diff against.
   6. Writes a new JSON file with all of this added, leaving the original untouched, then stores it straight into `workspace/causeway.db` itself, same as `InspectRepo` above.
 
-- **`src/main/scala/causeway/mini/ListRuns.scala`** (`list-runs` subcommand): a pure database read, no network call, no writes. Every evidence/enriched/classified file lives in one flat `workspace/exports/` folder named only `run_<uuid>...json`, nothing in the filename says which repo or window it's for. `list-runs --stage inspect-repo` or `--stage inspect-commits` lists the most recent runs of that stage, each with its owner/repo, window, and exact `source_file` path (already recorded on every run table), so `/inspect_commits` and `/classify_bugs` can offer a real choice instead of a list of opaque filenames.
+- **`src/main/scala/causeway/mini/ListRuns.scala`** (`list-runs` subcommand): a pure database read, no network call, no writes. Every evidence/enriched/classified file lives under `workspace/exports/<owner>-<repo>/json/`, grouped by repository, but a run within that folder is still just `run_<uuid>...json`, nothing in the filename says which window or date it's for. Three modes:
+  - No flags: browsable history, most recent mining passes first, like `git log`. One row per pass (not per stage), each tagged with `stagesReached` (e.g. `inspect-repo,inspect-commits`), so a person with no run id in hand yet can see what they've run before, when, and how far it got, then pick one to look at with `--run-id`.
+  - `--stage inspect-repo|inspect-commits|classify-bugs [--limit N]`: the most recent runs of that one stage, newest first, each with its owner/repo, window, and exact `source_file` path (already recorded on every run table). This is what `/inspect_commits` and `/classify_bugs` use to offer a real choice instead of a list of opaque filenames.
+  - `--run-id <id>`: looks up one exact run across all three stage tables at once. A whole mining pass shares one `run_id` end to end (minted by `/inspect_repo`, carried forward by `/inspect_commits` and `/classify_bugs`), so this is how someone gets back to a specific run they already have the id for, showing however many of the three stages it actually reached, not a fixed count.
 
 - **`.claude/agents/bug-classifier.md`**: each AI reviewer's instructions. Score a commit's message, its code diff, and its linked pull requests/issues, each from 0.0 to 1.0 with a short explanation, in a fixed reply format so results can be read back automatically. Everything it needs is embedded directly in its prompt; `disallowedTools` in its frontmatter enforces that it has no Bash, Read, Write, or Edit access at all, not just an instruction saying so.
 
@@ -111,6 +115,7 @@ Everything runs through a handful of chat commands, typed one after another in C
 - **`.claude/settings.json` / `.claude/hooks/restrict_agent_bash.py`**: a `PreToolUse` hook on the `Bash` tool, generic across every subagent, not specific to `repo-discovery`. For any Bash call, it checks the call's `agent_type`, looks up that agent's own `.claude/agents/<name>.md` frontmatter for an `allowedBashPattern` field, and denies the call outright if the command doesn't match. An agent with no such field declared (or no `agent_type` at all, i.e. the main session) is left completely alone. Adding a new Bash-restricted agent in the future means adding one frontmatter field to its own definition file, never touching this script. `bug-classifier` needs no such field, its frontmatter already denies it Bash entirely (`disallowedTools`).
 - **`.claude/commands/discover_repos.md`**: asks what kind of repository the user is looking for and how many candidates they want, hands that to the `repo-discovery` agent, then runs `qualify-repos` directly on whatever was found before showing anything, and offers to remember a chosen repo's URL for `/inspect_repo` or `/run_causeway`.
 - **`.claude/commands/list_qualifying_repos.md`**: asks how many repositories to show, runs `list-qualifying-repos` directly, shows the results, and offers to remember a chosen repo's URL the same way `/discover_repos` does.
+- **`.claude/commands/list_runs.md`**: asks how many past mining passes to show, runs `list-runs` with no flags (its `git log`-style history mode), shows them newest first with how far each one got, and if one is picked, looks it up by `--run-id` for the exact file and offers to remember it so `/inspect_commits` or `/classify_bugs` can pick it up directly instead of asking which file to use.
 - **`.claude/commands/inspect_repo.md`**: gathers the repo URL and time window (reusing either one already known from earlier in the session), lists the repo's configured remotes and lets the user choose one, lists that remote's branches via GitHub and lets the user choose one, resolves the window to a date, previews the commit count, asks for a scan commit limit, writes the evidence file, and stores it.
 - **`.claude/commands/inspect_commits.md`**: finds the evidence file (already known from earlier in the session, or looked up via `list-runs` and picked by owner/repo/window if not), runs the enrichment tool, and shows a few example results.
 - **`.claude/commands/classify_bugs.md`**: finds the enriched file (same `list-runs` lookup as above if not already known), asks how many genuine bug fixes to find (the bug target), works through the commits in groups of 5, newest first, sending each group to its own AI reviewer and judging the results as they come back, stopping once the target is reached. Shows a table, writes the final file, and stores it.
@@ -249,7 +254,7 @@ There are 28 commits in this window. How many should be scanned in detail? 6
 ```
 $ tools/causeway inspect-repo ... --mode write --scan-commit-limit 6
 WINDOW_COMMIT_COUNT=28
-EVIDENCE_FILE=workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
+EVIDENCE_FILE=workspace/exports/stleary-JSON-java/json/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
 RUN_ID=7e502434-a815-4663-a2fe-c5e775da3f87
 DATABASE=workspace/causeway.db
 ```
@@ -291,10 +296,10 @@ What it does, in order:
 Real output, enriching the same run:
 
 ```
-$ tools/causeway inspect-commits --evidence-file workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
+$ tools/causeway inspect-commits --evidence-file workspace/exports/stleary-JSON-java/json/run_7e502434-a815-4663-a2fe-c5e775da3f87.json
 Enriching 6 of 28 window commits (scanCommitLimit=6)
 ENRICHED_COUNT=6
-ENRICHED_FILE=workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87_enriched.json
+ENRICHED_FILE=workspace/exports/stleary-JSON-java/json/run_7e502434-a815-4663-a2fe-c5e775da3f87_enriched.json
 SAMPLE sha=4f859fdf3b prCount=1 diffFileCount=0 isMergeCommit=true
 SAMPLE sha=3dd0ec02f2 prCount=1 diffFileCount=3 isMergeCommit=false
 SAMPLE sha=6c14048079 prCount=1 diffFileCount=0 isMergeCommit=true
@@ -368,7 +373,7 @@ Target reached after this one batch (1 genuine bug fix, target was 1), so the 6t
 ```
 Examined 5 of 6 scanned commits, stopped early after reaching your
 target of 1 genuine bug fix.
-Final file: workspace/exports/run_7e502434-a815-4663-a2fe-c5e775da3f87_classified.json
+Final file: workspace/exports/stleary-JSON-java/json/run_7e502434-a815-4663-a2fe-c5e775da3f87_classified.json
 ```
 
 ### Running the whole pipeline in one command: `/run_causeway`
@@ -515,6 +520,11 @@ flowchart TD
     DB -. "every qualifying repo ever found" .-> LISTQ
     LISTQ -- "pick one" --> IR0
 
+    LISTRUNS["/list_runs optional<br/>pure DB read, git log style history"]
+    DB -. "every past mining pass" .-> LISTRUNS
+    LISTRUNS -- "pick a run stopped at inspect-repo" --> IC
+    LISTRUNS -- "pick a run stopped at inspect-commits" --> CB
+
     IR0["Stage 1: /inspect_repo<br/>ask repo URL and window,<br/>clone or open it, list its remotes, ask which to use"]
     IR1["fetch from chosen remote,<br/>list its branches via GitHub,<br/>ask which branch to mine"]
     IR0 --> IR1
@@ -556,7 +566,7 @@ flowchart TD
     RC -. "one command, whole chain" .-> IR0
 ```
 
-Reading top to bottom: `/discover_repos` and `/list_qualifying_repos` (both optional) get you to a repo URL if you don't already have one. From there, Stage 1 through Stage 3 (the boxes labeled `/inspect_repo`, `/inspect_commits`, `/classify_bugs`) are the actual mining pipeline, each one producing a JSON file that both feeds the next stage and gets stored in the database (dashed arrows). `/run_causeway`, off to the side, runs that same Stage 1 → Stage 3 chain as a single command.
+Reading top to bottom: `/discover_repos` and `/list_qualifying_repos` (both optional) get you to a repo URL if you don't already have one. `/list_runs` (also optional) is a different kind of revisit, not a repo to mine but a past mining pass to pick back up, jumping straight into Stage 2 or Stage 3 with that pass's file already in hand rather than starting over from Stage 1. From there, Stage 1 through Stage 3 (the boxes labeled `/inspect_repo`, `/inspect_commits`, `/classify_bugs`) are the actual mining pipeline, each one producing a JSON file that both feeds the next stage and gets stored in the database (dashed arrows). `/run_causeway`, off to the side, runs that same Stage 1 → Stage 3 chain as a single command.
 
 ## Running the whole workflow
 
@@ -571,3 +581,4 @@ Reading top to bottom: `/discover_repos` and `/list_qualifying_repos` (both opti
 5. Read the table `/classify_bugs` (or `/run_causeway`) prints, and open the final JSON file it mentions for the full detail behind every score.
 6. If any step's result looks wrong, run that same command again to redo it.
 7. Everything written to a JSON file along the way is also sitting in `workspace/causeway.db`, queryable directly with any SQLite client.
+8. Want to pick up a past run instead of starting fresh, but don't remember its id? Type `/list_runs`, it lists your recent mining passes, most recent first, with the date and how far each one got, like `git log`, and lets you pick one to continue from directly.

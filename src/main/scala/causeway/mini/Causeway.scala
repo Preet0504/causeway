@@ -51,8 +51,11 @@ object Causeway:
       |  inspect-repo          Discover a repo's remotes/branches and extract a commit window as evidence.
       |                        Modes: --mode list-remotes | list-branches | count | write
       |  inspect-commits       Enrich an evidence file's commits with GitHub PRs/issues and JGit diffs.
-      |  list-runs             List recent inspect-repo/inspect-commits runs (--stage), each tagged with
-      |                        its repository, window, and exact JSON file, for picking a file to reuse.
+      |  list-runs             No flags: browsable history, most recent mining passes first (like git log),
+      |                        each showing which stages it reached. --stage inspect-repo|inspect-commits|
+      |                        classify-bugs narrows to recent runs of just that stage. --run-id <id> looks
+      |                        up one exact run's full detail across every stage it reached. All modes take
+      |                        --limit N. Each result is tagged with its repository, window, and JSON file.
       |  store                 Upsert an evidence/enriched/classified JSON file into the SQLite catalog.
       |""".stripMargin
 

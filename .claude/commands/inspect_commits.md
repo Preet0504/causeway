@@ -47,6 +47,7 @@ Produce one final message stating, plainly:
 - How many commits were enriched, out of how many were in the window
 - Where the new enriched evidence file was written
 - Three example commits from the `SAMPLE` lines, each showing: its short sha, how many PRs were found, how many files it touched in its diff, and whether it was a merge commit (and therefore skipped for diffing)
+- The run id (the same one from step 1, `/inspect_commits` doesn't mint a new one), stated plainly as its own line, e.g. "Run ID: `<id>`, save this if you want to come back to this exact run later via `tools/causeway list-runs --run-id <id>`"
 
 Then tell the user to run `/classify_bugs` next, which will score each commit on whether it's a genuine bug fix.
 

@@ -73,6 +73,7 @@ After the table, state plainly:
 - How many genuine bug fixes you found, against the target (if you found fewer than the target even after examining every scanned commit, say so plainly, e.g. "found 2 of your target 5, that's every genuine bug fix among the 40 commits scanned")
 - If you stopped early, say so, and note that only the most recent examined commits were looked at, the rest of the scanned commits were never classified
 - Where the final JSON file was written
+- The run id (the same one carried from `/inspect_repo`/`/inspect_commits`), stated plainly as its own line, e.g. "Run ID: `<id>`, save this if you want to come back to this exact run later via `tools/causeway list-runs --run-id <id>`"
 
 Tell the user this is as far as Causeway Mini currently goes, there's no next command yet.
 

@@ -81,7 +81,7 @@ Build 3 preset options scaled to `WINDOW_COMMIT_COUNT`, not a fixed list that mi
 tools/causeway inspect-repo --repo-url <repo-url> --mode write --remote-name <chosen-remote> --branch-name <chosen-branch> --branch-sha <chosen-branch-sha> --since-date <iso-date> --window-label <slug> --scan-commit-limit <limit>
 ```
 
-This does not fetch again, it trusts the exact commit already chosen in step 3. It writes every commit within the window (sha, short/full message, commit date, parent shas), plus the chosen remote, branch, SHA, and the scan commit limit, to a JSON evidence file under `workspace/exports/`, then stores that same data into `workspace/causeway.db` itself, no separate step needed. Running this again, for the same repo and window, updates existing rows rather than duplicating them.
+This does not fetch again, it trusts the exact commit already chosen in step 3. It writes every commit within the window (sha, short/full message, commit date, parent shas), plus the chosen remote, branch, SHA, and the scan commit limit, to a JSON evidence file under `workspace/exports/<owner>-<repo>/json/`, then stores that same data into `workspace/causeway.db` itself, no separate step needed. Running this again, for the same repo and window, updates existing rows rather than duplicating them.
 
 Read the tool's stdout for:
 - `WINDOW_COMMIT_COUNT`, should match step 5's preview
@@ -102,6 +102,7 @@ Produce one final message stating, plainly:
 - How many commits fall within the window
 - The scan commit limit chosen
 - Where the evidence file was written
+- The run id (`RUN_ID` from step 7's output), stated plainly as its own line, e.g. "Run ID: `<id>`, save this if you want to come back to this exact run later via `tools/causeway list-runs --run-id <id>`"
 
 Then tell the user to run `/inspect_commits` next, which will fetch each commit's linked GitHub PRs/issues and its JGit diff content.
 

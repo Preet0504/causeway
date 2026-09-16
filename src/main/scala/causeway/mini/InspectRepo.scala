@@ -61,7 +61,7 @@ object InspectRepo:
     val token = sys.env.getOrElse("GITHUB_TOKEN", fail("GITHUB_TOKEN environment variable is required"))
     val repoUrl = opts.getOrElse("repo-url", fail("--repo-url is required"))
     val (owner, repo) = parseOwnerRepo(repoUrl)
-    val workspaceDir = new File(s"workspace/$owner-$repo")
+    val workspaceDir = new File(s"workspace/repos/$owner-$repo")
 
     opts.getOrElse("mode", fail("--mode is required (list-remotes, list-branches, count, or write)")) match
       case "list-remotes"  => runListRemotes(repoUrl, workspaceDir)
@@ -228,7 +228,7 @@ object InspectRepo:
         "commits" -> commitArr
       )
 
-      val exportsDir = new File("workspace/exports")
+      val exportsDir = new File(s"workspace/exports/$owner-$repo/json")
       exportsDir.mkdirs()
       val outFile = new File(exportsDir, s"run_$runId.json")
       Files.write(outFile.toPath, ujson.write(evidence, indent = 2).getBytes("UTF-8"))
