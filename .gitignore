@@ -7,3 +7,5 @@ project/project/
 .metals/
 workspace/
 .env
+__pycache__/
+*.pyc

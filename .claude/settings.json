@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/restrict_agent_bash.py",
+            "statusMessage": "Checking agent Bash restrictions..."
+          }
+        ]
+      }
+    ]
+  }
+}
