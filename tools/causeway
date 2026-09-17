@@ -22,10 +22,15 @@ cd "$REPO_ROOT"
 # this is the one place that environment gets populated, so no command
 # instructions need their own "source .env" step (or a raw curl call) ever
 # again. Doesn't override a GITHUB_TOKEN already exported by the caller.
+# Stripped through tr first: a .env saved with Windows CRLF line endings
+# (easy to end up with when it's edited on Windows, even for a Linux/WSL
+# run of this same script) leaves a trailing \r on each line that plain
+# `. ./.env` chokes on with "command not found", confirmed live on a real
+# Ubuntu/WSL run against this exact file.
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
-  . ./.env
+  . <(tr -d '\r' < .env)
   set +a
 fi
 
@@ -45,24 +50,45 @@ fi
 if [ "$stale" -eq 1 ]; then
   echo "tools/causeway: source changed, rebuilding ..." >&2
   export PATH="$HOME/scoop/shims:$PATH"
+  
   sbt -batch "compile" >&2
   sbt -batch "Compile/copyResources" >&2
 
-  deps_raw="$(sbt -batch "export Compile/dependencyClasspath" 2>/dev/null | grep -m1 '^List(')"
+  # `|| true`: grep -m1 exits right after its one match, which can send
+  # sbt SIGPIPE for the output it still had queued to write; under
+  # set -o pipefail that SIGPIPE'd exit status would otherwise abort this
+  # script via set -e even though deps_raw already captured the match
+  # grep printed before exiting. Confirmed live on real Linux/WSL, where
+  # this actually triggers, unlike on Windows/Git Bash.
+  deps_raw="$(sbt -batch "export Compile/dependencyClasspath" 2>/dev/null | grep -m1 '^List(' || true)"
   deps_raw="${deps_raw#List(}"
   deps_raw="${deps_raw%)}"
-  # java.exe is a native Windows binary and cannot resolve MSYS-style
-  # /c/Users/... paths embedded in an argfile (Git Bash only translates
-  # paths passed as literal command-line arguments, not file contents), so
-  # convert the Coursier cache root to a real Windows path first.
-  csr_cache="$(cygpath -w "$HOME/AppData/Local/Coursier/Cache/v1" 2>/dev/null || echo "$HOME/AppData/Local/Coursier/Cache/v1")"
+  if command -v cygpath >/dev/null 2>&1; then
+    # Git Bash on Windows: java.exe is a native Windows binary and cannot
+    # resolve MSYS-style /c/Users/... paths embedded in an argfile (Git
+    # Bash only translates paths passed as literal command-line arguments,
+    # not file contents), so convert the Coursier cache root to a real
+    # Windows path, and use Windows' ; classpath separator.
+    csr_cache="$(cygpath -w "$HOME/AppData/Local/Coursier/Cache/v1")"
+    classes_path="$(cygpath -w "$CLASSES_DIR")"
+    cp_sep=";"
+  else
+    # Real Linux/WSL: Coursier's own cache root (confirmed live against a
+    # real Ubuntu/WSL run), and POSIX's : classpath separator. The old
+    # Windows-only fallback here silently produced a broken classpath on
+    # Linux, both the wrong cache path and the wrong separator, instead of
+    # ever erroring loudly about it.
+    csr_cache="${XDG_CACHE_HOME:-$HOME/.cache}/coursier/v1"
+    classes_path="$CLASSES_DIR"
+    cp_sep=":"
+  fi
   deps_raw="${deps_raw//\$\{CSR_CACHE\}/$csr_cache}"
-  deps_raw="${deps_raw//, /;}"
+  deps_raw="${deps_raw//, /$cp_sep}"
 
   mkdir -p "$(dirname "$CACHE_FILE")"
   {
     echo "-cp"
-    echo "$CLASSES_DIR;$deps_raw"
+    echo "$classes_path$cp_sep$deps_raw"
   } > "$CACHE_FILE"
   echo "tools/causeway: classpath cache refreshed" >&2
 fi

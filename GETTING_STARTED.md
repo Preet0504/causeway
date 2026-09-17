@@ -2,7 +2,7 @@
 
 By the end of this guide, Causeway Mini will be fully working on your machine, and you'll have run it start to finish once: a real GitHub repo mined, its commits enriched with GitHub context, and at least one genuine bug fix found and explained. For the full reference on what each command does, see [README.md](README.md).
 
-Every step here, Windows and Linux both, was actually run while writing this guide, not written from documentation knowledge alone. That process found and fixed three real bugs in `tools/causeway` that only ever showed up on genuine Linux (a Windows-line-ending `.env` file, a pipe that aborted the script under `set -o pipefail`, and a hardcoded Windows classpath separator and cache path), so the Linux steps below are as trustworthy as the Windows ones, not a best-effort guess.
+Every step here, Windows and Linux both, was actually run while writing this guide, not written from documentation knowledge alone.
 
 ## 1. Install a JDK
 
