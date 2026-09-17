@@ -203,7 +203,27 @@ RUN stage=pass run_id=71dbab24-... owner=stleary repo=JSON-java window=past-3-mo
 SHOWN=2
 ```
 
-## If step 8 fails
+## Troubleshooting
 
-- `GITHUB_TOKEN environment variable is required`: step 7's `.env` file is missing, misnamed, or not at the repo root.
-- A jar-file or lock error from sbt: a leftover `java` process from an earlier attempt is holding a file open. Close any other sbt/Claude Code sessions and retry.
+Match the exact error text you're seeing to one of these.
+
+**`GITHUB_TOKEN environment variable is required`**
+Step 7's `.env` file is missing, misnamed, or not at the repo root. Confirm it's a file literally named `.env` in the same folder as `build.sbt`, containing a `GITHUB_TOKEN=` line with no quotes around the value.
+
+**A jar-file, lock, or named-pipe error from sbt** (`AccessDeniedException`, `FileSystemException: ... cannot be accessed by the system`, `Couldn't open file ...pipe...`, `failed to connect to server`)
+A leftover `java` process from an earlier attempt, or one an editor/IDE started in the background, is still holding a build file open. Find and stop it, then retry:
+- Windows (PowerShell): `Get-Process -Name java`, then `Stop-Process -Id <id> -Force` for each one listed.
+- Linux: `pkill -f sbt-launch.jar`.
+
+**`Could not find or load main class causeway.mini.Causeway` / `ClassNotFoundException`**
+The cached classpath under `target/` is stale or was built for a different setup than the one now running. Delete it and let `tools/causeway` rebuild from scratch:
+```bash
+rm -rf target
+tools/causeway -h
+```
+
+**`401 Bad credentials`** (from any command that talks to GitHub)
+Your token is invalid, expired, or was revoked. Generate a new one (step 6) and replace the value in `.env`.
+
+**Cloning a repository hangs or fails with a network error**
+Check your internet connection, and whether a corporate proxy or firewall is blocking outbound HTTPS to `github.com`.

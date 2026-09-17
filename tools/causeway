@@ -34,8 +34,20 @@ if [ -f .env ]; then
   set +a
 fi
 
+# One detection, reused everywhere below (cache filename, cache root,
+# classpath separator): Git Bash on Windows always has cygpath, real
+# Linux/WSL never does.
+if command -v cygpath >/dev/null 2>&1; then
+  CAUSEWAY_PLATFORM="windows"
+else
+  CAUSEWAY_PLATFORM="linux"
+fi
+
 CLASSES_DIR="target/out/jvm/scala-3.3.6/causeway-mini/classes"
-CACHE_FILE="target/causeway-classpath.txt"
+# One cache file per platform, not shared: a classpath built on Windows
+# uses ; separators and Windows-shaped paths, a classpath built on
+# Linux/WSL uses : and POSIX paths, so the two are never interchangeable.
+CACHE_FILE="target/causeway-classpath-$CAUSEWAY_PLATFORM.txt"
 
 stale=0
 if [ ! -f "$CACHE_FILE" ] || [ ! -d "$CLASSES_DIR" ]; then
@@ -50,9 +62,21 @@ fi
 if [ "$stale" -eq 1 ]; then
   echo "tools/causeway: source changed, rebuilding ..." >&2
   export PATH="$HOME/scoop/shims:$PATH"
-  
-  sbt -batch "compile" >&2
-  sbt -batch "Compile/copyResources" >&2
+
+  # --server, not -batch alone: sbt 2.x defaults to its native "sbtn"
+  # thin client, which spawns a persistent background server and talks to
+  # it over a named pipe (Windows) / unix socket (Linux). That server
+  # outlives this script and keeps target/out's jars open, which is
+  # exactly what produces the "resource occupied"/"file locked"/jar-lock
+  # errors on the next invocation, along with named-pipe/socket connection
+  # failures when the two don't line up. --server runs sbt directly in
+  # the foreground instead, the classic non-thin-client path, no
+  # persistent process left behind once this script exits. Confirmed live:
+  # -batch alone reproduced both a Win32 named-pipe connection failure and
+  # a locked-jar AccessDeniedException on a subsequent run; --server hit
+  # neither, on the same machine, same repo state.
+  sbt --server -batch "compile" >&2
+  sbt --server -batch "Compile/copyResources" >&2
 
   # `|| true`: grep -m1 exits right after its one match, which can send
   # sbt SIGPIPE for the output it still had queued to write; under
@@ -60,10 +84,10 @@ if [ "$stale" -eq 1 ]; then
   # script via set -e even though deps_raw already captured the match
   # grep printed before exiting. Confirmed live on real Linux/WSL, where
   # this actually triggers, unlike on Windows/Git Bash.
-  deps_raw="$(sbt -batch "export Compile/dependencyClasspath" 2>/dev/null | grep -m1 '^List(' || true)"
+  deps_raw="$(sbt --server -batch "export Compile/dependencyClasspath" 2>/dev/null | grep -m1 '^List(' || true)"
   deps_raw="${deps_raw#List(}"
   deps_raw="${deps_raw%)}"
-  if command -v cygpath >/dev/null 2>&1; then
+  if [ "$CAUSEWAY_PLATFORM" = "windows" ]; then
     # Git Bash on Windows: java.exe is a native Windows binary and cannot
     # resolve MSYS-style /c/Users/... paths embedded in an argfile (Git
     # Bash only translates paths passed as literal command-line arguments,
