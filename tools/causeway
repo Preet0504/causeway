@@ -36,9 +36,16 @@ fi
 
 # One detection, reused everywhere below (cache filename, cache root,
 # classpath separator): Git Bash on Windows always has cygpath, real
-# Linux/WSL never does.
+# Linux/WSL never does. macOS is its own case rather than "some kind of
+# Linux": it shares POSIX paths and the : separator, but Coursier caches
+# under ~/Library/Caches/Coursier, not ~/.cache/coursier, so folding it
+# into the linux branch produced a classpath of jar paths that simply do
+# not exist and a NoClassDefFoundError for scala/runtime/Nothing$ at
+# launch, with no hint that the classpath was the problem.
 if command -v cygpath >/dev/null 2>&1; then
   CAUSEWAY_PLATFORM="windows"
+elif [ "$(uname -s)" = "Darwin" ]; then
+  CAUSEWAY_PLATFORM="macos"
 else
   CAUSEWAY_PLATFORM="linux"
 fi
@@ -93,18 +100,33 @@ if [ "$stale" -eq 1 ]; then
     # Bash only translates paths passed as literal command-line arguments,
     # not file contents), so convert the Coursier cache root to a real
     # Windows path, and use Windows' ; classpath separator.
-    csr_cache="$(cygpath -w "$HOME/AppData/Local/Coursier/Cache/v1")"
+    csr_cache="$(cygpath -w "${COURSIER_CACHE:-$HOME/AppData/Local/Coursier/Cache/v1}")"
     classes_path="$(cygpath -w "$CLASSES_DIR")"
     cp_sep=";"
+  elif [ "$CAUSEWAY_PLATFORM" = "macos" ]; then
+    # macOS: Coursier follows the Mac convention and caches under
+    # ~/Library/Caches/Coursier, ignoring XDG_CACHE_HOME entirely.
+    csr_cache="${COURSIER_CACHE:-$HOME/Library/Caches/Coursier/v1}"
+    classes_path="$CLASSES_DIR"
+    cp_sep=":"
   else
     # Real Linux/WSL: Coursier's own cache root (confirmed live against a
     # real Ubuntu/WSL run), and POSIX's : classpath separator. The old
     # Windows-only fallback here silently produced a broken classpath on
     # Linux, both the wrong cache path and the wrong separator, instead of
     # ever erroring loudly about it.
-    csr_cache="${XDG_CACHE_HOME:-$HOME/.cache}/coursier/v1"
+    csr_cache="${COURSIER_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/coursier/v1}"
     classes_path="$CLASSES_DIR"
     cp_sep=":"
+  fi
+
+  # Fail here, where the cause is still visible, rather than handing java
+  # a classpath of paths that do not exist and letting it report a bare
+  # NoClassDefFoundError several layers removed from the actual mistake.
+  if [ ! -d "$csr_cache" ]; then
+    echo "tools/causeway: Coursier cache not found at $csr_cache" >&2
+    echo "tools/causeway: set COURSIER_CACHE to the correct cache root (the directory containing https/)" >&2
+    exit 1
   fi
   deps_raw="${deps_raw//\$\{CSR_CACHE\}/$csr_cache}"
   deps_raw="${deps_raw//, /$cp_sep}"
