@@ -4,7 +4,18 @@ By the end of this guide, Causeway Mini will be fully working on your machine, a
 
 Every step here, Windows and Linux both, was actually run while writing this guide, not written from documentation knowledge alone.
 
-## 1. Install a JDK
+## 1. Clone this repo
+
+Everything below assumes you're starting from this repo on your own machine, so get it first, before installing anything else:
+
+```bash
+git clone -b causeway-mini https://github.com/Preet0504/causeway.git
+cd causeway
+```
+
+The `-b causeway-mini` matters: this project lives on that branch specifically, `main` is a different, unrelated codebase. Everything from here on assumes you're inside this `causeway` directory.
+
+## 2. Install a JDK
 
 Causeway Mini's build tool, sbt, requires JDK 17 or newer.
 
@@ -27,19 +38,28 @@ openjdk version "17.0.16" 2025-07-15
 OpenJDK Runtime Environment Temurin-17.0.16+8 (build 17.0.16+8)
 ```
 
-## 2. Install sbt
+## 3. Install sbt
 
 **Windows**, using [Scoop](https://scoop.sh/):
 ```powershell
 scoop install sbt
 ```
 
-**Linux**, continuing with SDKMAN from step 1:
+**Linux**, continuing with SDKMAN from step 2:
 ```bash
 sdk install sbt
 ```
 
-## 3. Get a bash shell
+Confirm sbt can see this project (run this from inside the `causeway` directory from step 1):
+```bash
+sbt --version
+```
+You should see:
+```
+sbt version in this project: 2.0.7
+```
+
+## 4. Get a bash shell
 
 `tools/causeway`, the CLI every chat command calls, is a bash script, so you need bash to run it.
 
@@ -47,22 +67,28 @@ sdk install sbt
 
 **Linux**: you already have one, nothing to do here.
 
-## 4. Install Python and PyYAML (required)
+## 5. Install Python and PyYAML (required)
 
 One of the AI agents this project uses, `repo-discovery`, is given raw Bash access so it can run one specific command on your behalf (`tools/causeway search-repos ...`) when you run `/discover_repos`. On its own, that access has no limit: nothing would stop it from running some other shell command instead, including one that reads or writes `workspace/causeway.db` directly, or deletes files. A hook (`.claude/hooks/restrict_agent_bash.py`) is what actually enforces "only that one command, nothing else," and that hook is written in Python. Without Python installed, the hook can't run at all. This was confirmed directly against this exact project: it fails *open*, meaning the restriction just silently stops applying, with no warning that it's gone. That's why this step isn't optional.
 
-**Windows**: install Python from [python.org](https://www.python.org/downloads/), then:
+Install PyYAML into a virtual environment inside the repo, rather than globally, so it doesn't collide with any other Python project on your machine (and on newer Debian/Ubuntu and Homebrew Python installs, a plain global `pip install` is blocked outright unless you do this):
+
+**Windows**: install Python from [python.org](https://www.python.org/downloads/), then, from the repo root:
 ```powershell
+python -m venv .venv
+.venv\Scripts\activate
 pip install pyyaml
 ```
 
 **Linux**:
 ```bash
-sudo apt install python3 python3-pip
-pip3 install pyyaml
+sudo apt install python3 python3-pip python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install pyyaml
 ```
 
-Confirm it worked:
+Confirm it worked, from that same activated terminal:
 ```
 python --version
 python -c "import yaml; print('PyYAML', yaml.__version__)"
@@ -74,16 +100,7 @@ PyYAML 6.0.1
 ```
 (Exact versions may differ, what matters is both commands succeed with no error.)
 
-## 5. Clone this repo and confirm sbt can see it
-
-```bash
-cd path/to/repo-bugs-extraction
-sbt --version
-```
-You should see:
-```
-sbt version in this project: 2.0.7
-```
+Keep this virtual environment activated in whatever terminal you go on to launch Claude Code from. The hook that actually needs PyYAML is invoked directly by Claude Code as a plain `python` command, not from a shell you control, so it only sees PyYAML if it was already on `PATH` (via this activated venv) at the moment Claude Code itself started. If you ever suspect the hook isn't finding it, close Claude Code, re-activate the venv in your terminal, and reopen Claude Code from that same terminal.
 
 ## 6. Get a GitHub token
 
