@@ -17,6 +17,14 @@ In short, it:
 
 Everything runs through a handful of chat commands, typed one after another in Claude Code, each one picking up where the last left off. You can either run each stage yourself, one command at a time, or run `/run_causeway` once to go through the whole thing without stopping in between. Both paths ask exactly the same questions and produce exactly the same result, "The commands, in order" below covers this in detail.
 
+## How much to trust the results
+
+Causeway Mini doesn't validate its bug-fix classifications against any labeled ground truth. Building a dataset of commits already known to be "definitely a bug fix" or "definitely not," to benchmark the classifier's accuracy against, was considered and deliberately not pursued.
+
+What it gives you instead: every commit is scored independently on three signals, its message, its actual code diff, and any linked GitHub PR/issue text, each with a written explanation, not just a number. The verdict, genuine bug fix or not, is a judgment call made from those three pieces of evidence, one you can read and check yourself rather than a score you have to trust outright.
+
+In short, the output is reviewable, not provably accurate. Treat every classification as a starting point for your own review, not a final answer.
+
 ## The pipeline at a glance
 
 | Stage | Command | You give it | It produces |
