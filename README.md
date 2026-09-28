@@ -2,6 +2,8 @@
 
 New here? [GETTING_STARTED.md](GETTING_STARTED.md) walks through installing everything and running a first real mining pass, start to finish.
 
+Want to add to this project, or curious how it actually got built? [CONTRIBUTING.md](CONTRIBUTING.md) covers who owns what and the bar for calling a change done; [docs/genesis-prompts.md](docs/genesis-prompts.md) reconstructs the real prompts that built it, phase by phase.
+
 ## What is this?
 
 Causeway Mini looks through a public GitHub project's history and figures out which past changes were actually bug fixes, as opposed to new features, cleanup, or documentation changes, and explains why it thinks so for each one.
