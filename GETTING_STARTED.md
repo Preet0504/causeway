@@ -2,7 +2,7 @@
 
 By the end of this guide, Causeway Mini will be fully working on your machine, and you'll have run it start to finish once: a real GitHub repo mined, its commits enriched with GitHub context, and at least one genuine bug fix found and explained. For the full reference on what each command does, see [README.md](README.md).
 
-Every step here, Windows and Linux both, was actually run while writing this guide, not written from documentation knowledge alone.
+Every Windows and Linux step here was actually run while writing this guide, not written from documentation knowledge alone. The Mac steps come from a real fix a contributor built and verified on their own Mac and merged into this project; they're written in this guide's format but weren't independently re-run here.
 
 ## 1. Clone this repo
 
@@ -28,6 +28,11 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 sdk install java 17.0.16-tem
 ```
 
+**Mac**, using [Homebrew](https://brew.sh/):
+```bash
+brew install --cask temurin@17
+```
+
 Confirm it worked:
 ```
 java -version
@@ -50,6 +55,11 @@ scoop install sbt
 sdk install sbt
 ```
 
+**Mac**, using Homebrew:
+```bash
+brew install sbt
+```
+
 Confirm sbt can see this project (run this from inside the `causeway` directory from step 1):
 ```bash
 sbt --version
@@ -67,6 +77,8 @@ sbt version in this project: 2.0.7
 
 **Linux**: you already have one, nothing to do here.
 
+**Mac**: you already have one too, nothing to install. Terminal.app's default shell is `zsh`, not `bash`, but that doesn't matter here, `tools/causeway` is a script with its own `#!/usr/bin/env bash` line, it runs under bash regardless of what shell you're typing commands into.
+
 ## 5. Install Python and PyYAML (required)
 
 One of the AI agents this project uses, `repo-discovery`, is given raw Bash access so it can run one specific command on your behalf (`tools/causeway search-repos ...`) when you run `/discover_repos`. On its own, that access has no limit: nothing would stop it from running some other shell command instead, including one that reads or writes `workspace/causeway.db` directly, or deletes files. A hook (`.claude/hooks/restrict_agent_bash.py`) is what actually enforces "only that one command, nothing else," and that hook is written in Python. Without Python installed, the hook can't run at all. This was confirmed directly against this exact project: it fails *open*, meaning the restriction just silently stops applying, with no warning that it's gone. That's why this step isn't optional.
@@ -83,6 +95,13 @@ pip install pyyaml
 **Linux**:
 ```bash
 sudo apt install python3 python3-pip python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install pyyaml
+```
+
+**Mac**: Python 3 is already installed. From the repo root:
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install pyyaml
@@ -230,7 +249,7 @@ Step 7's `.env` file is missing, misnamed, or not at the repo root. Confirm it's
 **A jar-file, lock, or named-pipe error from sbt** (`AccessDeniedException`, `FileSystemException: ... cannot be accessed by the system`, `Couldn't open file ...pipe...`, `failed to connect to server`)
 A leftover `java` process from an earlier attempt, or one an editor/IDE started in the background, is still holding a build file open. Find and stop it, then retry:
 - Windows (PowerShell): `Get-Process -Name java`, then `Stop-Process -Id <id> -Force` for each one listed.
-- Linux: `pkill -f sbt-launch.jar`.
+- Linux or Mac: `pkill -f sbt-launch.jar`.
 
 **`Could not find or load main class causeway.mini.Causeway` / `ClassNotFoundException`**
 The cached classpath under `target/` is stale or was built for a different setup than the one now running. Delete it and let `tools/causeway` rebuild from scratch:

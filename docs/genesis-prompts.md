@@ -1,6 +1,6 @@
 # Genesis prompts
 
-This project was not built from a single upfront specification. It grew prompt by prompt, across one continuous Claude Code session (2026-09-05 through 2026-09-27), each phase triggered by a specific gap, a professor's feedback, or a bug found while working on something else, not a plan written in advance.
+This project was not built from a single upfront specification. It grew prompt by prompt, across one continuous Claude Code session (2026-09-05 through 2026-09-27), each phase triggered by a specific gap or a bug found while working on something else, not a plan written in advance.
 
 What follows is a reconstruction, not a transcript. Each entry below consolidates a phase's real opening prompt with everything that got added, corrected, or removed in the messages that followed it, folded into one dense paragraph, the way a planned genesis script reads, even though these were not planned that way. The actual, unedited opening line for the whole project is Phase 0, quoted exactly. Every phase after that is a synthesis, built from `DECISIONS.md`'s own record of what was asked and why. Where a phase's real opening words survive recognizably, they are kept; where a phase is a consolidation of many small follow-ups, that is stated.
 
@@ -24,7 +24,7 @@ A repo URL alone does not define repository state. Fetch from the remote and rec
 
 ## Phase 3 - One CLI, not scattered `sbt runMain` calls (2026-09-11)
 
-Per the professor's own suggestion: package a unified, compiled `causeway` CLI instead of having agents repeatedly invoke `sbt runMain` on individual classes as the number of Scala tools grows. Build a launcher that caches its own classpath and only re-invokes sbt when a source file has actually changed, so a stable, predictable command surface exists that does not depend on sbt's build-server state at call time.
+Package a unified, compiled `causeway` CLI instead of having agents repeatedly invoke `sbt runMain` on individual classes as the number of Scala tools grows. Build a launcher that caches its own classpath and only re-invokes sbt when a source file has actually changed, so a stable, predictable command surface exists that does not depend on sbt's build-server state at call time.
 
 ## Phase 4 - A real database, not just JSON files (2026-09-11/13)
 
