@@ -1,0 +1,12 @@
+# build output
+target/
+project/target/
+project/project/
+.bsp/
+.idea/
+.metals/
+.bloop/
+
+# local state: database, clones, secrets
+data/
+.env

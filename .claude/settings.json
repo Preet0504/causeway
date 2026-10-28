@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tools/causeway:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Bash(sqlite3:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)"
+    ]
+  }
+}

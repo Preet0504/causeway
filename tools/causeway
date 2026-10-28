@@ -1,0 +1,47 @@
+#!/bin/sh
+# Launcher for the Causeway Mini CLI.
+#
+# Loads .env (for GITHUB_TOKEN), then runs the compiled CLI directly with java.
+# sbt is only started when a source or build file is newer than the cached
+# classpath, so a normal call costs one JVM start, not an sbt start.
+#
+# Works on macOS, Linux, and Windows via Git Bash (which Claude Code requires
+# on Windows anyway). Requires a JDK 17+ and sbt on PATH.
+set -eu
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+CP_FILE="target/causeway.classpath"
+
+stale=0
+if [ ! -s "$CP_FILE" ]; then
+  stale=1
+elif [ -n "$(find src build.sbt project/build.properties -type f -newer "$CP_FILE" 2>/dev/null | head -n 1)" ]; then
+  stale=1
+fi
+
+if [ "$stale" = 1 ]; then
+  mkdir -p target
+  # `export` prints the classpath as the last line of sbt's stdout.
+  out=$(sbt -batch -error compile "export Runtime/fullClasspath") || {
+    echo "causeway: build failed; run 'sbt compile' to see why" >&2
+    exit 1
+  }
+  printf '%s\n' "$out" | tail -n 1 > "$CP_FILE"
+fi
+
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+  JAVA="$JAVA_HOME/bin/java"
+else
+  JAVA=java
+fi
+
+exec "$JAVA" -cp "$(cat "$CP_FILE")" causeway.mini.Main "$@"
